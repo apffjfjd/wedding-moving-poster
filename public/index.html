@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>셀프 웨딩 무빙 포스터</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💍</text></svg>">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>셀프 웨딩 무빙 포스터</h1>
+    <p class="lead">사진만 올리면 끝. 영상 편집·렌더링 없이, URL 하나로 결혼식장에서 사진 슬라이드쇼를 무한 재생합니다.</p>
+
+    <section class="card">
+      <h2>새 슬라이드쇼 만들기</h2>
+      <p class="muted">회원가입은 필요 없습니다. 만들면 <b>재생 URL</b>(결혼식장에서 열 주소)과 <b>편집 링크</b>(사진·효과를 수정할 때 필요)가 발급됩니다.</p>
+      <button id="create" class="primary">슬라이드쇼 만들기</button>
+      <p id="error" class="error" hidden></p>
+    </section>
+
+    <section class="card" id="mine" hidden>
+      <h2>이 브라우저에서 만든 슬라이드쇼</h2>
+      <ul class="showlist" id="list"></ul>
+    </section>
+  </main>
+  <script type="module" src="/js/index.js"></script>
+</body>
+</html>

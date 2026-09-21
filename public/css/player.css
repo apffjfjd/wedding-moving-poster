@@ -1,0 +1,95 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+
+body { cursor: pointer; }
+body.idle { cursor: none; }
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 슬라이드 하나: 래퍼(.slide, opacity/filter 전환) > 모션 레이어(.mv, 확대/이동) > 이미지 */
+.slide {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  will-change: opacity;
+}
+
+.mv {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.slide img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+/* 원본 이미지: cover는 화면을 꽉 채우고, contain은 원본 전체를 보여 준다 */
+.slide .fg { object-fit: contain; transform-origin: center center; will-change: transform; }
+.slide.cover .fg { object-fit: cover; }
+
+/* 세로 사진 등 비율이 다른 경우 확대·블러 처리한 같은 이미지를 배경으로 깐다 */
+.slide .bg {
+  object-fit: cover;
+  filter: blur(36px) brightness(0.65) saturate(1.15);
+  transform: scale(1.25);
+  transform-origin: center center;
+  will-change: transform;
+}
+.slide.cover .bg { display: none; }
+
+.message {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: #f4ecdf;
+  font-size: clamp(18px, 3vw, 32px);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  background: radial-gradient(ellipse at center, #2b2420 0%, #0d0b0a 70%);
+  pointer-events: none;
+}
+.message[hidden] { display: none; }
+
+.hint {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 14px;
+  white-space: nowrap;
+  transition: opacity 0.6s;
+  pointer-events: none;
+}
+.hint.gone { opacity: 0; }
+.hint kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  font-family: inherit;
+}

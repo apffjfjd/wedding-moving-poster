@@ -1,0 +1,15 @@
+{
+  "name": "wedding-moving-poster",
+  "version": "0.1.0",
+  "description": "셀프 웨딩 무빙 포스터 - 사진을 업로드하고 URL 하나로 브라우저에서 실시간 슬라이드쇼를 무한 재생한다 (BD-0003)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "build:pages": "node scripts/build-pages.mjs"
+  }
+}
