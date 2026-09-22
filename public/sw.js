@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
   } else if (SHELL.includes(url.pathname)) {
     // 코드 갱신은 반영하되 오프라인에서는 캐시로 동작한다.
     event.respondWith(networkFirst(request, 1500));
-  } else if (url.pathname.startsWith('/photos/')) {
+  } else if (url.pathname.startsWith('/photos/') || url.pathname.startsWith('/audio/')) {
     event.respondWith(cacheFirst(request));
   }
 });

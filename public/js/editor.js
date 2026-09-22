@@ -31,8 +31,11 @@ function rememberKey(key) {
   }
 }
 
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024; // server.js LIMITS.maxAudioBytes 와 맞춘 값(클라이언트에서 미리 걸러 헛수고를 줄인다)
+
 const editKey = findKey();
 let photos = [];
+let audio = null;
 
 async function api(method, path, { body, headers = {} } = {}) {
   const res = await fetch(`/api/slideshows/${showId}${path}`, {
@@ -178,6 +181,71 @@ async function uploadFiles(fileList) {
   else setStatus(`${files.length}장을 업로드했습니다.`);
 }
 
+// ---- 배경음악 ----
+function renderAudio() {
+  const current = $('audioCurrent');
+  current.hidden = !audio;
+  if (audio) $('audioPlayer').src = audio.url;
+}
+
+function setupAudio() {
+  const drop = $('audioDrop');
+  const input = $('audioFile');
+  const status = $('audioStatus');
+
+  async function upload(file) {
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) return (status.textContent = '음악 파일을 선택해 주세요.'), void status.classList.add('error');
+    if (file.size > MAX_AUDIO_BYTES) {
+      status.textContent = `파일이 너무 큽니다 (최대 ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB).`;
+      return status.classList.add('error');
+    }
+    status.classList.remove('error');
+    status.textContent = '업로드 중…';
+    try {
+      audio = await api('POST', '/audio', { body: file, headers: { 'Content-Type': file.type || 'audio/mpeg' } });
+      renderAudio();
+      refreshPreview();
+      status.textContent = `${file.name} 을(를) 등록했습니다.`;
+    } catch (err) {
+      status.textContent = err.message;
+      status.classList.add('error');
+    }
+  }
+
+  input.addEventListener('change', () => {
+    upload(input.files[0]);
+    input.value = '';
+  });
+  ['dragenter', 'dragover'].forEach((type) =>
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.add('over');
+    }),
+  );
+  ['dragleave', 'drop'].forEach((type) =>
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.remove('over');
+    }),
+  );
+  drop.addEventListener('drop', (e) => upload(e.dataTransfer.files[0]));
+
+  $('audioRemove').addEventListener('click', async () => {
+    try {
+      await api('DELETE', '/audio');
+      audio = null;
+      renderAudio();
+      refreshPreview();
+      status.textContent = '배경음악을 삭제했습니다.';
+      status.classList.remove('error');
+    } catch (err) {
+      status.textContent = err.message;
+      status.classList.add('error');
+    }
+  });
+}
+
 function setupUpload() {
   const drop = $('drop');
   const input = $('file');
@@ -251,10 +319,14 @@ async function init() {
   $('app').hidden = false;
   setupLinks();
   setupUpload();
+  setupAudio();
   setupRemove();
   previewFrame.src = `/s/${showId}`;
-  photos = (await api('GET', '')).photos;
+  const meta = await api('GET', '');
+  photos = meta.photos;
+  audio = meta.audio;
   render();
+  renderAudio();
 }
 
 init().catch((err) => {

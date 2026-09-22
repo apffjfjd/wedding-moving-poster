@@ -4,8 +4,9 @@
 // source 인터페이스:
 //   pollMs    목록 갱신 주기(ms)
 //   messages  { empty, gone, offline, error } 상태별 안내 문구
-//   load()    -> { status: 'ok', photos } | { status: 'gone' | 'offline' | 'error', message? }
+//   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
+//   audio     { url, version?, viaFetch? } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
 import { resolveEffect, layoutFor, motionFor, transitionFor, MOTION_EASING } from './effects.js';
 
 const HOLD_MS = 5000; // 사진이 정지해 보이는 시간
@@ -45,6 +46,23 @@ async function tryLoad(url, viaFetch) {
   return { url: src, ...dims };
 }
 
+const safeStorage = {
+  get(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* 저장 실패해도 재생에는 지장 없음(이번 방문 동안만 상태 유지) */
+    }
+  },
+};
+
 export function startPlayer({ source, stage, messageEl, hintEl }) {
   const params = new URLSearchParams(location.search);
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
@@ -56,6 +74,92 @@ export function startPlayer({ source, stage, messageEl, hintEl }) {
   let lastIndex = -1;
   let sequence = 0; // 슬라이드 방향(팬/Ken Burns 좌우 번갈아)용 누적 카운터
   let wakeFromEmpty = null; // 사진이 없어 대기 중일 때, 사진이 생기면 즉시 깨우는 콜백
+
+  // ---- 배경음악 (반복 재생 1곡) ----
+  // 브라우저 자동재생 정책상 사용자 입력(클릭/F 키) 전에는 소리가 나지 않을 수 있다.
+  let audioEl = null;
+  let audioKey = null; // 트랙 동일 여부 비교용(url:version)
+  let muted = safeStorage.get('wmp:muted') === '1';
+  // 편집기 미리보기(iframe)에는 버튼을 두지 않는다. 여러 미리보기가 동시에 소리를 낼 수 있어
+  // 거기서는 음악을 자동재생하지 않는다(사용자 입력이 없어 브라우저가 어차피 막는다).
+  let muteBtn = null;
+  if (!embedded) {
+    muteBtn = document.createElement('button');
+    muteBtn.type = 'button';
+    muteBtn.className = 'audio-toggle';
+    muteBtn.hidden = true;
+    muteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMuted(!muted);
+      attemptPlay();
+    });
+    document.body.append(muteBtn);
+  }
+
+  function updateMuteBtn() {
+    if (!muteBtn) return;
+    muteBtn.hidden = !audioEl;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-label', muted ? '배경음악 켜기' : '배경음악 끄기');
+  }
+
+  function setMuted(value) {
+    muted = value;
+    if (audioEl) audioEl.muted = value;
+    safeStorage.set('wmp:muted', value ? '1' : '0');
+    updateMuteBtn();
+  }
+
+  function attemptPlay() {
+    audioEl?.play().catch(() => {
+      /* 자동재생 차단: 클릭이나 F 키를 받으면 다시 시도한다 */
+    });
+  }
+
+  /** 배경음악 트랙을 목록에 맞춰 바꾼다. audio가 null이면 정지·제거한다. */
+  async function syncAudio(audio) {
+    const key = audio ? `${audio.url}:${audio.version || ''}` : null;
+    if (key === audioKey) return;
+    audioKey = key;
+    if (audioEl) {
+      audioEl.pause();
+      if (audioEl.src.startsWith('blob:')) URL.revokeObjectURL(audioEl.src);
+      audioEl.remove();
+      audioEl = null;
+    }
+    if (!audio) {
+      updateMuteBtn();
+      return updateHint();
+    }
+
+    let src = audio.url;
+    if (audio.viaFetch) {
+      try {
+        const res = await fetch(audio.url, { mode: 'cors' });
+        if (!res.ok) return updateMuteBtn();
+        src = URL.createObjectURL(await res.blob());
+      } catch {
+        return updateMuteBtn(); // 못 불러오면 조용히 포기(음악 없이 재생은 계속된다)
+      }
+    }
+    if (key !== audioKey) return; // 받는 동안 목록이 또 바뀜: 최신 것만 반영
+    audioEl = document.createElement('audio');
+    audioEl.loop = true;
+    audioEl.muted = muted;
+    audioEl.src = src;
+    audioEl.style.display = 'none';
+    document.body.append(audioEl);
+    updateMuteBtn();
+    updateHint();
+    attemptPlay();
+  }
+
+  function updateHint() {
+    if (!hintEl) return;
+    hintEl.textContent = audioEl
+      ? '클릭하거나 F 키를 눌러 전체화면·배경음악을 재생하세요'
+      : '클릭하거나 F 키를 눌러 전체화면으로 재생하세요';
+  }
 
   function showMessage(text) {
     messageEl.textContent = text;
@@ -74,6 +178,7 @@ export function startPlayer({ source, stage, messageEl, hintEl }) {
         wakeFromEmpty?.();
         warmUp();
       }
+      syncAudio(result.audio || null);
     }
     return result;
   }
@@ -244,9 +349,16 @@ export function startPlayer({ source, stage, messageEl, hintEl }) {
   if (embedded) {
     hintEl?.remove();
   } else {
-    document.addEventListener('click', toggleFullscreen);
+    // 전체화면 켜는 클릭/F 키는 브라우저가 인정하는 사용자 입력이므로, 배경음악 자동재생 차단도 함께 풀린다.
+    document.addEventListener('click', () => {
+      toggleFullscreen();
+      attemptPlay();
+    });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+        attemptPlay();
+      }
     });
     setTimeout(() => hintEl?.classList.add('gone'), 6000);
     document.addEventListener('fullscreenchange', () => hintEl?.classList.add('gone'));

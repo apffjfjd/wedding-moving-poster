@@ -22,22 +22,33 @@
     <p id="nokey" class="card error" hidden>Drive API 키가 아직 설정되지 않았습니다. <code>pages/config.js</code>의 <code>apiKey</code>를 채우거나 빌드 시 <code>DRIVE_API_KEY</code>를 지정해야 재생됩니다. (README 참고)</p>
 
     <section class="card">
-      <h2>1. 드라이브 폴더 준비</h2>
+      <h2>1. 사진 폴더 준비</h2>
       <ol class="steps">
         <li>구글 드라이브에서 새 폴더를 만들고 사진을 넣습니다. (JPEG·PNG·WebP 등, 폰에서 올려도 됩니다)</li>
         <li>폴더 우클릭 → <b>공유</b> → 일반 액세스를 <b>"링크가 있는 모든 사용자"</b>, 역할은 <b>뷰어</b>로 설정합니다.</li>
-        <li>폴더 우클릭 → <b>링크 복사</b>. 아래에 붙여넣습니다.</li>
+        <li>폴더 우클릭 → <b>링크 복사</b>. 아래 "사진 폴더 링크"에 붙여넣습니다.</li>
       </ol>
       <p class="muted">링크를 아는 사람은 누구나 폴더의 사진을 볼 수 있습니다. 예식이 끝나면 공유를 해제하세요.</p>
     </section>
 
     <section class="card">
-      <h2>2. 재생 URL 만들기</h2>
+      <h2>2. 배경음악 폴더 준비 (선택)</h2>
+      <p>사진과는 <b>완전히 다른 폴더</b>를 하나 더 만들어 음악 파일(MP3·OGG·WAV·M4A)을 넣습니다. 여러 개를 넣으면 이름순 첫 번째만 재생됩니다.
+      위와 같은 방법으로 "링크가 있는 모든 사용자 - 뷰어"로 공유하고 링크를 복사합니다. 배경음악이 필요 없으면 이 단계는 건너뛰어도 됩니다.</p>
+      <p class="muted">브라우저 자동재생 정책 때문에, 결혼식장 PC에서도 화면을 클릭하거나 <b>F</b> 키를 눌러야 소리가 납니다(전체화면을 켜는 동작과 같습니다). 재생 중에는 화면 오른쪽 아래 버튼으로 음소거할 수 있습니다.</p>
+    </section>
+
+    <section class="card">
+      <h2>3. 재생 URL 만들기</h2>
       <div class="linkrow">
-        <label for="folder">폴더 링크</label>
+        <label for="folder">사진 폴더 링크</label>
         <input id="folder" type="text" placeholder="https://drive.google.com/drive/folders/…">
-        <button id="make" class="primary">URL 만들기</button>
       </div>
+      <div class="linkrow">
+        <label for="bgmFolder">배경음악 폴더 링크 <span class="muted">(선택)</span></label>
+        <input id="bgmFolder" type="text" placeholder="https://drive.google.com/drive/folders/… (비워두면 음악 없음)">
+      </div>
+      <button id="make" class="primary">URL 만들기</button>
       <p id="err" class="error" hidden></p>
       <div id="result" hidden>
         <div class="linkrow">
@@ -46,12 +57,12 @@
           <button id="copy">복사</button>
           <a id="open" class="btn primary" target="_blank" rel="noopener">재생 열기</a>
         </div>
-        <p class="muted">결혼식장 PC에서 이 주소를 열고 클릭하거나 <b>F</b> 키로 전체화면을 켜세요. 이후 폴더에 사진을 넣거나 빼면 약 30초 안에 반영됩니다. 이 주소를 즐겨찾기해 두면 다시 만들 필요가 없습니다.</p>
+        <p class="muted">결혼식장 PC에서 이 주소를 열고 클릭하거나 <b>F</b> 키로 전체화면을 켜세요. 이후 폴더에 사진/음악을 넣거나 빼면 약 30초 안에 반영됩니다. 이 주소를 즐겨찾기해 두면 다시 만들 필요가 없습니다.</p>
       </div>
     </section>
 
     <section class="card">
-      <h2>3. 파일명으로 효과 고르기 (선택)</h2>
+      <h2>4. 파일명으로 효과 고르기 (선택)</h2>
       <p>사진은 <b>파일명 순서</b>로 재생됩니다(<code>2</code>가 <code>10</code>보다 먼저). 파일명에 효과 이름을 밑줄(언더바)로 이어 붙이면 그 사진에 해당 효과가 적용되고, 안 붙이면 자동입니다.</p>
       <p><code>01_kenburns.jpg</code> · <code>02_zoom-in.jpg</code> · <code>03.jpg</code>(자동) · <code>04_blur.jpg</code></p>
       <table class="rules" id="rules">

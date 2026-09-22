@@ -16,11 +16,13 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 export const LIMITS = {
   maxPhotos: 100,
   maxPhotoBytes: 12 * 1024 * 1024,
+  maxAudioBytes: 20 * 1024 * 1024, // 배경음악은 5분 mp3(128kbps) 기준 약 5MB, 여유를 둔다
   maxJsonBytes: 16 * 1024,
 };
 
 const ID_RE = /^[A-Za-z0-9_-]{12}$/;
 const PHOTO_FILE_RE = /^[A-Za-z0-9_-]{12}\.(jpg|png|webp)$/;
+const AUDIO_FILE_RE = /^[A-Za-z0-9_-]{12}\.(mp3|ogg|wav|m4a)$/;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -32,6 +34,10 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
 };
 
 class HttpError extends Error {
@@ -49,6 +55,16 @@ export function sniffImage(buf) {
   if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
   if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
   if (buf.length > 12 && buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP') return 'webp';
+  return null;
+}
+
+/** 파일 시그니처로 오디오 형식을 판별한다. 지원하지 않으면 null. */
+export function sniffAudio(buf) {
+  if (buf.length > 3 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) return 'mp3'; // "ID3" 태그
+  if (buf.length > 2 && buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return 'mp3'; // MPEG 프레임 동기
+  if (buf.length >= 4 && buf.subarray(0, 4).toString('latin1') === 'OggS') return 'ogg';
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WAVE') return 'wav';
+  if (buf.length >= 8 && buf.subarray(4, 8).toString('latin1') === 'ftyp') return 'm4a'; // MP4/M4A 컨테이너
   return null;
 }
 
@@ -141,6 +157,8 @@ export function createApp({ dataDir }) {
       height: p.height,
       effect: p.effect,
     })),
+    // 파일명이 업로드마다 새로 생기므로, url 자체가 재생기 입장의 버전 값이 된다.
+    audio: meta.audio ? { id: meta.audio.id, url: `/audio/${meta.id}/${meta.audio.file}` } : null,
   });
 
   const clampDim = (v) => {
@@ -159,7 +177,7 @@ export function createApp({ dataDir }) {
       const newShowId = newId();
       const editKey = crypto.randomBytes(24).toString('base64url');
       await fs.mkdir(path.join(showDir(newShowId), 'photos'), { recursive: true });
-      const meta = { id: newShowId, keyHash: hashKey(editKey), createdAt: new Date().toISOString(), version: 0, photos: [] };
+      const meta = { id: newShowId, keyHash: hashKey(editKey), createdAt: new Date().toISOString(), version: 0, photos: [], audio: null };
       await saveMeta(meta);
       return send(res, 201, {
         id: newShowId,
@@ -229,13 +247,46 @@ export function createApp({ dataDir }) {
       });
     }
 
+    // 배경음악: 슬라이드쇼당 한 곡만 유지한다(향후 확장 여지, REQ-0003 미결정 범위 밖이라 단순하게 시작).
+    if (sub === 'audio' && req.method === 'POST') {
+      assertKey(await loadMeta(id), req);
+      const body = await readBody(req, LIMITS.maxAudioBytes);
+      const ext = sniffAudio(body);
+      if (!ext) throw new HttpError(415, 'MP3, OGG, WAV, M4A 음악 파일만 업로드할 수 있습니다.');
+
+      return withLock(id, async () => {
+        const meta = await loadMeta(id);
+        await fs.mkdir(path.join(showDir(id), 'audio'), { recursive: true });
+        const previous = meta.audio;
+        meta.audio = { id: newId(), file: `${newId()}.${ext}` };
+        await fs.writeFile(path.join(showDir(id), 'audio', meta.audio.file), body);
+        if (previous) await fs.rm(path.join(showDir(id), 'audio', previous.file), { force: true });
+        await saveMeta(meta);
+        send(res, 201, publicView(meta).audio);
+      });
+    }
+
+    if (sub === 'audio' && req.method === 'DELETE') {
+      assertKey(await loadMeta(id), req);
+      return withLock(id, async () => {
+        const meta = await loadMeta(id);
+        if (meta.audio) {
+          await fs.rm(path.join(showDir(id), 'audio', meta.audio.file), { force: true });
+          meta.audio = null;
+          await saveMeta(meta);
+        }
+        send(res, 200, publicView(meta));
+      });
+    }
+
     throw new HttpError(404, 'Not found');
   }
 
-  async function servePhoto(res, url) {
-    const [, , id, file] = url.pathname.split('/'); // /photos/:id/:file
-    if (!ID_RE.test(id || '') || !PHOTO_FILE_RE.test(file || '')) throw new HttpError(404, 'Not found');
-    const filePath = path.join(showDir(id), 'photos', file);
+  async function serveMedia(res, url, kind) {
+    const [, , id, file] = url.pathname.split('/'); // /photos/:id/:file 또는 /audio/:id/:file
+    const re = kind === 'photos' ? PHOTO_FILE_RE : AUDIO_FILE_RE;
+    if (!ID_RE.test(id || '') || !re.test(file || '')) throw new HttpError(404, 'Not found');
+    const filePath = path.join(showDir(id), kind, file);
     let data;
     try {
       data = await fs.readFile(filePath);
@@ -274,7 +325,8 @@ export function createApp({ dataDir }) {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
-      if (url.pathname.startsWith('/photos/')) return await servePhoto(res, url);
+      if (url.pathname.startsWith('/photos/')) return await serveMedia(res, url, 'photos');
+      if (url.pathname.startsWith('/audio/')) return await serveMedia(res, url, 'audio');
       return await serveStatic(res, url.pathname);
     } catch (err) {
       if (res.headersSent) return res.destroy();

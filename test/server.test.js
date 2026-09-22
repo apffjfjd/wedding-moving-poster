@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createApp, sniffImage, LIMITS } from '../server.js';
+import { createApp, sniffImage, sniffAudio, LIMITS } from '../server.js';
 
 // 최소한의 유효한 JPEG/PNG 시그니처 (서버는 시그니처만 검사한다)
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 2)]);
+// 최소한의 유효한 MP3(ID3 태그)/OGG 시그니처
+const MP3 = Buffer.concat([Buffer.from('ID3', 'latin1'), Buffer.alloc(64, 3)]);
+const OGG = Buffer.concat([Buffer.from('OggS', 'latin1'), Buffer.alloc(64, 4)]);
 
 let server, base, dataDir;
 
@@ -32,10 +35,23 @@ const upload = (id, key, body = JPEG, { w = '1600', h = '900' } = {}) =>
     body,
   });
 
+const uploadAudio = (id, key, body = MP3) =>
+  fetch(`${base}/api/slideshows/${id}/audio`, { method: 'POST', headers: { 'x-edit-key': key }, body });
+
 test('sniffImage: 시그니처로 형식을 판별한다', () => {
   assert.equal(sniffImage(JPEG), 'jpg');
   assert.equal(sniffImage(PNG), 'png');
   assert.equal(sniffImage(Buffer.from('<html>not an image</html>')), null);
+});
+
+test('sniffAudio: 시그니처로 형식을 판별한다', () => {
+  assert.equal(sniffAudio(MP3), 'mp3');
+  assert.equal(sniffAudio(Buffer.concat([Buffer.from([0xff, 0xfb]), Buffer.alloc(32)])), 'mp3'); // ID3 태그 없는 순수 MPEG 프레임
+  assert.equal(sniffAudio(OGG), 'ogg');
+  assert.equal(sniffAudio(Buffer.concat([Buffer.from('RIFF', 'latin1'), Buffer.alloc(4), Buffer.from('WAVE', 'latin1')])), 'wav');
+  assert.equal(sniffAudio(Buffer.concat([Buffer.alloc(4), Buffer.from('ftyp', 'latin1'), Buffer.alloc(8)])), 'm4a');
+  assert.equal(sniffAudio(Buffer.from('not audio at all')), null);
+  assert.equal(sniffAudio(JPEG), null); // 이미지가 오디오로 오인되지 않아야 한다
 });
 
 test('FR-004: 생성 시 고유 URL과 편집 키를 발급하고, 공개 응답에는 키가 없다', async () => {
@@ -116,6 +132,61 @@ test('FR-002: 사진별 효과를 지정하고 잘못된 효과는 거부한다'
   assert.equal(meta.photos[0].effect, 'kenburns');
 });
 
+test('배경음악: 생성 직후에는 audio가 null이고, 업로드하면 URL이 생기며 내려받을 수 있다', async () => {
+  const { id, editKey } = await createShow();
+  assert.equal((await (await fetch(`${base}/api/slideshows/${id}`)).json()).audio, null);
+
+  const res = await uploadAudio(id, editKey, MP3);
+  assert.equal(res.status, 201);
+  const audio = await res.json();
+  assert.ok(audio.url.startsWith(`/audio/${id}/`));
+
+  const meta = await (await fetch(`${base}/api/slideshows/${id}`)).json();
+  assert.deepEqual(meta.audio, audio);
+
+  const file = await fetch(`${base}${audio.url}`);
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get('content-type'), 'audio/mpeg');
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), MP3);
+});
+
+test('배경음악: 다시 올리면 이전 곡을 대체하고(한 곡만 유지) 옛 파일은 지워진다', async () => {
+  const { id, editKey } = await createShow();
+  const first = await (await uploadAudio(id, editKey, MP3)).json();
+  const second = await (await uploadAudio(id, editKey, OGG)).json();
+  assert.notEqual(first.url, second.url);
+
+  const meta = await (await fetch(`${base}/api/slideshows/${id}`)).json();
+  assert.deepEqual(meta.audio, second);
+  assert.equal((await fetch(`${base}${first.url}`)).status, 404); // 옛 파일은 삭제됨
+  assert.equal((await fetch(`${base}${second.url}`)).headers.get('content-type'), 'audio/ogg');
+});
+
+test('배경음악: 삭제하면 audio가 null이 되고 파일도 지워진다', async () => {
+  const { id, editKey } = await createShow();
+  const audio = await (await uploadAudio(id, editKey)).json();
+  const res = await fetch(`${base}/api/slideshows/${id}/audio`, { method: 'DELETE', headers: { 'x-edit-key': editKey } });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).audio, null);
+  assert.equal((await fetch(`${base}${audio.url}`)).status, 404);
+});
+
+test('배경음악: 권한·형식·용량 검증', async () => {
+  const { id, editKey } = await createShow();
+  assert.equal((await uploadAudio(id, 'wrong-key')).status, 403);
+  assert.equal((await uploadAudio(id, editKey, JPEG)).status, 415); // 이미지는 오디오로 업로드 불가
+  const big = Buffer.concat([MP3, Buffer.alloc(LIMITS.maxAudioBytes)]);
+  const res = await uploadAudio(id, editKey, big).catch(() => ({ status: 413 }));
+  assert.equal(res.status, 413);
+});
+
+test('슬라이드쇼 삭제 시 배경음악 파일도 함께 지워진다', async () => {
+  const { id, editKey } = await createShow();
+  const audio = await (await uploadAudio(id, editKey)).json();
+  await fetch(`${base}/api/slideshows/${id}`, { method: 'DELETE', headers: { 'x-edit-key': editKey } });
+  assert.equal((await fetch(`${base}${audio.url}`)).status, 404);
+});
+
 test('사진 삭제 시 목록과 파일이 함께 제거된다', async () => {
   const { id, editKey } = await createShow();
   const photo = await (await upload(id, editKey)).json();
@@ -146,7 +217,7 @@ test('동시 업로드해도 meta가 깨지지 않고 모든 사진이 등록된
 
 test('보안: 경로 조작 요청은 정적/사진 경로 모두에서 거부된다', async () => {
   const { id } = await createShow();
-  for (const p of ['/photos/../server.js', `/photos/${id}/..%2f..%2fmeta.json`, '/../server.js', '/%2e%2e/server.js', `/photos/${id}/meta.json`]) {
+  for (const p of ['/photos/../server.js', `/photos/${id}/..%2f..%2fmeta.json`, '/../server.js', '/%2e%2e/server.js', `/photos/${id}/meta.json`, `/audio/${id}/..%2f..%2fmeta.json`, `/audio/${id}/meta.json`]) {
     const res = await fetch(`${base}${p}`);
     assert.equal(res.status, 404, p);
   }

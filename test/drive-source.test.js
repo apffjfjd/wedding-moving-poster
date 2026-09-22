@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFolderId, parsePhotoName, toPhotos, createDriveSource } from '../public/js/drive-source.js';
+import { parseFolderId, parsePhotoName, toPhotos, findAudio, createDriveSource } from '../public/js/drive-source.js';
 
 const FOLDER = '1AbCdEfGhIjKlMnOpQrStUvWxYz012345';
 
@@ -83,6 +83,24 @@ test('toPhotos: 파일 목록이 없어도 빈 배열', () => {
   assert.deepEqual(toPhotos({}, cfg), []);
 });
 
+test('findAudio: 오디오 파일이 없으면 null', () => {
+  assert.equal(findAudio({ files: [file('a', '1.jpg')] }, cfg), null);
+  assert.equal(findAudio({}, cfg), null);
+});
+
+test('findAudio: 이름순 첫 곡만 배경음악으로 쓰고 나머지는 무시한다', () => {
+  const audio = (id, name) => file(id, name, { mimeType: 'audio/mpeg' });
+  const a = findAudio({ files: [audio('b', '2_song.mp3'), audio('a', '1_song.mp3'), file('c', '1.jpg')] }, cfg);
+  assert.equal(a.id, 'a');
+  assert.equal(a.url, 'https://api.test/drive/v3/files/a?alt=media&key=K%26Y');
+  assert.equal(a.viaFetch, true);
+  assert.equal(a.version, '2026-09-21T00:00:00Z');
+});
+
+test('findAudio: 숨김 오디오 파일은 제외한다', () => {
+  assert.equal(findAudio({ files: [file('a', '.hidden.mp3', { mimeType: 'audio/mpeg' })] }, cfg), null);
+});
+
 // ---- createDriveSource.load 상태 매핑 (fetch를 가짜로 대체) ----
 async function withFetch(handler, fn) {
   const original = globalThis.fetch;
@@ -94,26 +112,32 @@ async function withFetch(handler, fn) {
   }
 }
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const source = (apiKey = 'KEY') => createDriveSource({ folderId: FOLDER, config: { ...cfg, apiKey } });
+const BGM_FOLDER = '2ZzYyXxWwVvUuTtSsRrQqPpOo987654';
+const source = ({ apiKey = 'KEY', bgmFolderId } = {}) => createDriveSource({ folderId: FOLDER, bgmFolderId, config: { ...cfg, apiKey } });
 
 test('load: API 키가 없으면 error 상태와 안내 문구', async () => {
-  const r = await source('').load();
+  const r = await source({ apiKey: '' }).load();
   assert.equal(r.status, 'error');
   assert.match(r.message, /API 키/);
 });
 
-test('load: 정상 응답이면 정렬된 사진 목록을 돌려준다', async () => {
+test('load: 정상 응답이면 정렬된 사진 목록을 돌려준다 (bgmFolderId가 없으면 배경음악 조회는 하지 않는다)', async () => {
+  let calls = 0;
   const r = await withFetch(
     async (url) => {
+      calls++;
       const u = new URL(url);
       assert.equal(u.searchParams.get('key'), 'KEY');
       assert.ok(u.searchParams.get('q').includes(`'${FOLDER}' in parents`));
+      assert.ok(u.searchParams.get('q').includes("mimeType contains 'image/'"));
       return json({ files: [file('b', '2.jpg'), file('a', '1.jpg')] });
     },
     () => source().load(),
   );
   assert.equal(r.status, 'ok');
   assert.deepEqual(r.photos.map((p) => p.id), ['a', 'b']);
+  assert.equal(r.audio, null);
+  assert.equal(calls, 1); // 배경음악 폴더를 지정하지 않았으니 조회 자체를 하지 않는다
 });
 
 test('load: 네트워크 예외와 5xx는 offline (마지막 목록으로 계속 재생하게 한다)', async () => {
@@ -133,5 +157,61 @@ test('load: 빈 목록이면 폴더 접근 여부로 gone 과 빈 폴더를 구�
   const gone = await withFetch(handler(404), () => source().load());
   assert.equal(gone.status, 'gone');
   const empty = await withFetch(handler(200), () => source().load());
-  assert.deepEqual(empty, { status: 'ok', photos: [] });
+  assert.deepEqual(empty, { status: 'ok', photos: [], audio: null });
+});
+
+// ---- 배경음악은 사진과 완전히 별도인 폴더(bgmFolderId)에서 조회한다 ----
+const audioFile = (id, name) => file(id, name, { mimeType: 'audio/mpeg' });
+
+function routeByFolder(url) {
+  const q = new URL(url).searchParams.get('q') || '';
+  return q.includes(`'${BGM_FOLDER}'`) ? 'bgm' : 'photos';
+}
+
+test('load: 사진 폴더와 배경음악 폴더를 각각 따로 조회한다', async () => {
+  const r = await withFetch(
+    async (url) => {
+      if (routeByFolder(url) === 'bgm') {
+        assert.ok(new URL(url).searchParams.get('q').includes("mimeType contains 'audio/'"));
+        return json({ files: [audioFile('b', '2.mp3'), audioFile('a', '1.mp3')] }); // 이름순 뒤: b는 무시되어야 함
+      }
+      return json({ files: [file('p', '1.jpg')] });
+    },
+    () => source({ bgmFolderId: BGM_FOLDER }).load(),
+  );
+  assert.equal(r.status, 'ok');
+  assert.equal(r.photos.length, 1);
+  assert.equal(r.audio.id, 'a');
+});
+
+test('load: 배경음악 폴더 조회가 네트워크 오류로 실패해도 사진 재생은 계속된다', async () => {
+  const r = await withFetch(
+    async (url) => {
+      if (routeByFolder(url) === 'bgm') throw new TypeError('Failed to fetch');
+      return json({ files: [file('p', '1.jpg')] });
+    },
+    () => source({ bgmFolderId: BGM_FOLDER }).load(),
+  );
+  assert.equal(r.status, 'ok');
+  assert.equal(r.photos.length, 1);
+  assert.equal(r.audio, null);
+});
+
+test('load: 배경음악 폴더가 403(공유 안 됨)이어도 사진 재생은 계속된다', async () => {
+  const r = await withFetch(
+    async (url) => (routeByFolder(url) === 'bgm' ? json({}, 403) : json({ files: [file('p', '1.jpg')] })),
+    () => source({ bgmFolderId: BGM_FOLDER }).load(),
+  );
+  assert.equal(r.status, 'ok');
+  assert.equal(r.audio, null);
+});
+
+test('load: 배경음악 폴더는 비어 있어도 gone 처리되지 않는다(사진 폴더만 검사)', async () => {
+  const r = await withFetch(
+    async (url) => (routeByFolder(url) === 'bgm' ? json({ files: [] }) : json({ files: [file('p', '1.jpg')] })),
+    () => source({ bgmFolderId: BGM_FOLDER }).load(),
+  );
+  assert.equal(r.status, 'ok');
+  assert.equal(r.photos.length, 1);
+  assert.equal(r.audio, null);
 });

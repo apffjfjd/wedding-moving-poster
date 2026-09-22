@@ -16,7 +16,8 @@ const source = {
       const res = await fetch(`/api/slideshows/${showId}`, { cache: 'no-store' });
       if (res.status === 404) return { status: 'gone' };
       if (!res.ok) return { status: 'offline' };
-      return { status: 'ok', photos: (await res.json()).photos };
+      const meta = await res.json();
+      return { status: 'ok', photos: meta.photos, audio: meta.audio ? { url: meta.audio.url, version: meta.audio.url } : null };
     } catch {
       return { status: 'offline' }; // 현장 네트워크 불안정: 마지막으로 받은 목록으로 계속 재생한다.
     }

@@ -25,23 +25,39 @@ function make() {
   const err = $('err');
   const folderId = parseFolderId($('folder').value);
   if (!folderId) {
-    err.textContent = '폴더 링크를 인식하지 못했습니다. 드라이브에서 "링크 복사"한 주소를 그대로 붙여넣어 주세요.';
+    err.textContent = '사진 폴더 링크를 인식하지 못했습니다. 드라이브에서 "링크 복사"한 주소를 그대로 붙여넣어 주세요.';
     err.hidden = false;
     $('result').hidden = true;
     return;
   }
+
+  const bgmInput = $('bgmFolder').value.trim();
+  let bgmFolderId = null;
+  if (bgmInput) {
+    bgmFolderId = parseFolderId(bgmInput);
+    if (!bgmFolderId) {
+      err.textContent = '배경음악 폴더 링크를 인식하지 못했습니다. 비워 두면 배경음악 없이 만들어집니다.';
+      err.hidden = false;
+      $('result').hidden = true;
+      return;
+    }
+  }
+
   err.hidden = true;
   const url = new URL('./player.html', location.href);
   url.searchParams.set('folder', folderId);
+  if (bgmFolderId) url.searchParams.set('bgm', bgmFolderId);
   $('playUrl').value = url.href;
   $('open').href = url.href;
   $('result').hidden = false;
 }
 
 $('make').addEventListener('click', make);
-$('folder').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') make();
-});
+for (const id of ['folder', 'bgmFolder']) {
+  $(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') make();
+  });
+}
 
 $('copy').addEventListener('click', async () => {
   const input = $('playUrl');
