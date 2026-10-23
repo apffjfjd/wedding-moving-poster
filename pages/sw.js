@@ -1,9 +1,9 @@
 // 서비스 워커(Pages 모드): 결혼식장 네트워크가 불안정하거나 끊겨도 한 번 재생한 슬라이드쇼를 계속 재생한다.
 // - 드라이브 사진 목록/재생 페이지/코드: 네트워크 우선, 실패 시 마지막 캐시
 // - 사진 이미지: 캐시 우선 (재생기가 CORS fetch로 받으므로 성공 응답만 안전하게 캐시된다)
-const CACHE = 'wmp-pages-v1';
+const CACHE = 'wmp-pages-v2';
 const scope = self.registration.scope;
-const SHELL = ['js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/drive-player.js', 'config.js', 'css/player.css'].map(
+const SHELL = ['js/poster.js', 'js/timing.js', 'js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/drive-player.js', 'config.js', 'css/player.css'].map(
   (p) => new URL(p, scope).pathname,
 );
 const PLAYER_PATH = new URL('player.html', scope).pathname;

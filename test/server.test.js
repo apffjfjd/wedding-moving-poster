@@ -231,3 +231,34 @@ test('페이지 라우팅: / , /s/:id , /e/:id 가 각각 HTML을 반환한다',
     assert.ok((await res.text()).includes(marker), p);
   }
 });
+
+
+test('LP 이미지: 권한·트랙 검증, 업로드·교체·삭제 및 음악 교체 시 정리', async () => {
+  const { id, editKey } = await createShow();
+  const track = await (await uploadAudio(id, editKey)).json();
+  const cover = (method, body, audioId = track.id, key = editKey) => fetch(`${base}/api/slideshows/${id}/audio-cover`, {
+    method, headers: { 'x-edit-key': key, 'x-audio-id': audioId }, body,
+  });
+  assert.equal((await cover('POST', JPEG, track.id, 'wrong')).status, 403);
+  assert.equal((await cover('POST', JPEG, 'old-track')).status, 409);
+  assert.equal((await cover('POST', MP3)).status, 415);
+  const first = await (await cover('POST', JPEG)).json();
+  assert.equal((await fetch(`${base}${first.cover.url}`)).headers.get('content-type'), 'image/jpeg');
+  const second = await (await cover('POST', PNG)).json();
+  assert.notEqual(first.cover.url, second.cover.url);
+  assert.equal((await fetch(`${base}${first.cover.url}`)).status, 404);
+  const meta = await (await fetch(`${base}/api/slideshows/${id}`)).json();
+  assert.equal(meta.photos.length, 0);
+  assert.deepEqual(meta.audio.cover, second.cover);
+  const removed = await (await cover('DELETE')).json();
+  assert.equal(removed.cover, null);
+  assert.equal((await fetch(`${base}${second.cover.url}`)).status, 404);
+  const third = await (await cover('POST', JPEG)).json();
+  const newTrack = await (await uploadAudio(id, editKey, OGG)).json();
+  assert.equal(newTrack.cover, null);
+  assert.equal((await fetch(`${base}${third.cover.url}`)).status, 404);
+  assert.equal((await cover('POST', JPEG)).status, 409);
+  const fourth = await (await cover('POST', JPEG, newTrack.id)).json();
+  await fetch(`${base}/api/slideshows/${id}/audio`, { method: 'DELETE', headers: { 'x-edit-key': editKey } });
+  assert.equal((await fetch(`${base}${fourth.cover.url}`)).status, 404);
+});

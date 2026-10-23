@@ -6,8 +6,10 @@
 //   messages  { empty, gone, offline, error } 상태별 안내 문구
 //   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
-//   audio     { url, version?, viaFetch? } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
-import { resolveEffect, layoutFor, motionFor, transitionFor, MOTION_EASING } from './effects.js';
+//   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
+import { resolveEffect, motionFor, transitionFor, MOTION_EASING } from './effects.js';
+
+import { frameRatio } from './poster.js';
 
 import { holdMsFromSeconds } from './timing.js';
 
@@ -68,6 +70,60 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const params = new URLSearchParams(location.search);
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
   const lite = params.get('lite') === '1';
+  const ratio = frameRatio(params.get('frameWidth'), params.get('frameHeight'));
+  const composition = document.createElement('div');
+  composition.className = 'poster-composition';
+  const frameSlot = document.createElement('div');
+  frameSlot.className = 'photo-slot';
+  const frame = document.createElement('div');
+  frame.className = 'photo-frame';
+  frameSlot.append(frame);
+  const recordSlot = document.createElement('div');
+  recordSlot.className = 'record-slot';
+  const record = document.createElement('div');
+  record.className = 'record';
+  record.setAttribute('role', 'img');
+  record.setAttribute('aria-label', '배경음악 LP');
+  const label = document.createElement('div');
+  label.className = 'record-label';
+  record.append(label);
+  recordSlot.append(record);
+  composition.append(frameSlot, recordSlot);
+  stage.after(composition);
+  function sizePoster() {
+    const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height);
+    frame.style.width = `${width}px`;
+    frame.style.height = `${width * ratio.height / ratio.width}px`;
+    record.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight)}px`;
+  }
+  new ResizeObserver(sizePoster).observe(composition);
+  sizePoster();
+  let coverKey = null;
+  let coverSequence = 0;
+  let coverBlob = null;
+  async function syncCover(cover) {
+    const key = cover ? `${cover.url}:${cover.version || ''}` : null;
+    if (key === coverKey) return;
+    coverKey = key;
+    const token = ++coverSequence;
+    label.replaceChildren();
+    if (coverBlob) URL.revokeObjectURL(coverBlob);
+    coverBlob = null;
+    if (!cover) return;
+    let loadedCover = null;
+    for (const url of [cover.url, ...(cover.fallbacks || [])]) {
+      loadedCover = await tryLoad(url, cover.viaFetch);
+      if (loadedCover) break;
+    }
+    if (token !== coverSequence) {
+      if (loadedCover?.url.startsWith('blob:')) URL.revokeObjectURL(loadedCover.url);
+      return;
+    }
+    if (loadedCover) {
+      if (loadedCover.url.startsWith('blob:')) coverBlob = loadedCover.url;
+      label.append(makeImg(loadedCover.url, 'record-art'));
+    } else coverKey = null; // 다음 갱신에서 재시도
+  }
   const embedded = window.self !== window.top; // 편집 화면 미리보기 iframe 여부
 
   let photos = null; // 마지막으로 받은 사진 목록. null이면 아직 한 번도 받지 못함
@@ -179,6 +235,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         wakeFromEmpty?.();
         warmUp();
       }
+      syncCover(result.audio?.cover || null);
       syncAudio(result.audio || null);
     }
     return result;
@@ -235,9 +292,9 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
 
   /** 사진 하나를 화면에 올리고 등장 전환 + 정지 구간 모션을 시작한다. */
   function present(photo, index) {
-    // 실제로 불러온 이미지 크기 기준으로 비율을 판정한다 (EXIF 회전이 반영된 값)
+    // 실제 이미지 크기로 효과를 선택하고, 원본은 흰 프레임에 고정한다.
     const effect = resolveEffect(photo, index, { lite });
-    const layout = layoutFor(photo.width, photo.height, stage.clientWidth, stage.clientHeight);
+    const layout = 'blur-contain';
     const flip = sequence++ % 2 === 1;
 
     const slide = document.createElement('div');
@@ -249,33 +306,37 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     const bg = layout === 'blur-contain' ? makeImg(photo.url, 'bg') : null;
     const fg = makeImg(photo.url, 'fg');
     if (bg) mv.append(bg);
-    mv.append(fg);
+    const photoSlide = document.createElement('div');
+    photoSlide.className = 'photo-slide';
+    photoSlide.append(fg);
     slide.append(mv);
 
     const previous = [...stage.children];
+    const previousPhotos = [...frame.children];
+    frame.append(photoSlide);
     stage.append(slide);
 
     const motion = motionFor(effect, flip);
     const motionOpts = { duration: holdMs + TRANS_MS * 2, easing: MOTION_EASING, fill: 'forwards' };
     if (motion.mv) mv.animate(motion.mv, motionOpts);
-    if (motion.fg) fg.animate(motion.fg, motionOpts);
+    // 원본은 고정 contain으로 유지하고 모션은 블러 배경에만 적용한다.
     if (motion.bg && bg) bg.animate(motion.bg, motionOpts);
 
     const t = transitionFor(effect);
-    slide.animate(t.enter, {
+    for (const layer of [slide, photoSlide]) layer.animate(t.enter, {
       duration: TRANS_MS * (1 - t.enterDelayRatio),
       delay: TRANS_MS * t.enterDelayRatio,
       easing: 'ease-in-out',
       fill: 'both',
     });
     if (t.fadeOutPrev) {
-      previous.forEach((el) =>
+      [...previous, ...previousPhotos].forEach((el) =>
         el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: TRANS_MS * t.enterDelayRatio, easing: 'ease-in', fill: 'forwards' }),
       );
     }
 
     // 전환이 끝나 새 사진이 화면을 완전히 덮으면 이전 슬라이드를 제거해 메모리를 회수한다.
-    return sleep(TRANS_MS).then(() => previous.forEach((el) => el.remove()));
+    return sleep(TRANS_MS).then(() => [...previous, ...previousPhotos].forEach((el) => el.remove()));
   }
 
   /** 다음에 보여 줄 사진의 인덱스. 재생 중 사진이 추가/삭제돼도 흐름이 자연스럽게 이어지게 한다. */
@@ -301,6 +362,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     for (;;) {
       if (!photos.length) {
         stage.replaceChildren();
+        frame.replaceChildren();
         lastId = null;
         lastIndex = -1;
         showMessage(source.messages.empty);

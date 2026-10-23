@@ -35,6 +35,7 @@
       <h2>2. 배경음악 폴더 준비 (선택)</h2>
       <p>사진과는 <b>완전히 다른 폴더</b>를 하나 더 만들어 음악 파일(MP3·OGG·WAV·M4A)을 넣습니다. 여러 개를 넣으면 이름순 첫 번째만 재생됩니다.
       위와 같은 방법으로 "링크가 있는 모든 사용자 - 뷰어"로 공유하고 링크를 복사합니다. 배경음악이 필요 없으면 이 단계는 건너뛰어도 됩니다.</p>
+      <p>LP 중앙에 사용할 이미지를 음악과 <b>같은 이름</b>으로 이 음악 폴더에 넣으세요. 예: <code>01_Our Song.mp3</code> + <code>01_Our Song.jpg</code>. 음악이 바뀌면 해당 이미지로 자동 변경됩니다. 이미지가 없으면 기본 파스텔 라벨을 표시합니다.</p>
       <p class="muted">브라우저 자동재생 정책 때문에, 결혼식장 PC에서도 화면을 클릭하거나 <b>F</b> 키를 눌러야 소리가 납니다(전체화면을 켜는 동작과 같습니다). 재생 중에는 화면 오른쪽 아래 버튼으로 음소거할 수 있습니다.</p>
     </section>
 
@@ -54,6 +55,13 @@
         <output id="durationValue" for="duration">5초</output>
       </div>
       <p class="muted">사진 한 장이 완전히 표시되는 시간입니다. 전환 애니메이션 1.6초는 별도로 적용됩니다.</p>
+      <div class="linkrow ratio-row">
+        <span>사진 프레임 비율</span>
+        <label for="frameWidth">가로</label><input id="frameWidth" type="number" min="1" max="20" step="0.1" value="4">
+        <span>:</span>
+        <label for="frameHeight">세로</label><input id="frameHeight" type="number" min="1" max="20" step="0.1" value="6">
+      </div>
+      <p class="muted">기본 가로 4 : 세로 6. 1~20 사이의 비율을 입력하세요. 사진 전체가 흰 프레임 안에 표시됩니다.</p>
       <button id="make" class="primary">URL 만들기</button>
       <p id="err" class="error" hidden></p>
       <div id="result" hidden>
@@ -75,7 +83,7 @@
         <thead><tr><th>효과</th><th>파일명에 쓰는 이름</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="muted">사진 크기·방향은 자동으로 감지합니다. 세로 사진은 확대·블러 배경 위에 원본이 표시됩니다.</p>
+      <p class="muted">사진 크기·방향은 자동으로 감지합니다. 모든 사진은 블러 배경 위 흰 프레임 안에 잘림 없이 표시됩니다.</p>
     </section>
   </main>
   <script type="module" src="./js/generator.js"></script>
