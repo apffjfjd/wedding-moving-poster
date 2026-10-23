@@ -158,7 +158,7 @@ export function createApp({ dataDir }) {
       effect: p.effect,
     })),
     // 파일명이 업로드마다 새로 생기므로, url 자체가 재생기 입장의 버전 값이 된다.
-    audio: meta.audio ? { id: meta.audio.id, url: `/audio/${meta.id}/${meta.audio.file}` } : null,
+    audio: meta.audio ? { id: meta.audio.id, url: `/audio/${meta.id}/${meta.audio.file}`, cover: meta.audio.cover ? { url: `/photos/${meta.id}/${meta.audio.cover}` } : null } : null,
   });
 
   const clampDim = (v) => {
@@ -247,6 +247,27 @@ export function createApp({ dataDir }) {
       });
     }
 
+    // LP 이미지는 현재 음악에 귀속된다. 트랙 ID로 업로드 도중 음악이 바뀐 경우도 검증한다.
+    if (sub === 'audio-cover' && (req.method === 'POST' || req.method === 'DELETE')) {
+      assertKey(await loadMeta(id), req);
+      const body = req.method === 'POST' ? await readBody(req, LIMITS.maxPhotoBytes) : null;
+      const ext = body ? sniffImage(body) : null;
+      if (body && !ext) throw new HttpError(415, 'JPEG, PNG, WebP 이미지만 업로드할 수 있습니다.');
+      return withLock(id, async () => {
+        const meta = await loadMeta(id);
+        if (!meta.audio || req.headers['x-audio-id'] !== meta.audio.id) throw new HttpError(409, '배경음악이 변경되었습니다. 현재 음악을 확인해 주세요.');
+        const previous = meta.audio.cover;
+        if (body) {
+          const file = `${newId()}.${ext}`;
+          await fs.writeFile(path.join(showDir(id), 'photos', file), body);
+          meta.audio.cover = file;
+        } else delete meta.audio.cover;
+        await saveMeta(meta);
+        if (previous) await fs.rm(path.join(showDir(id), 'photos', previous), { force: true });
+        send(res, 200, publicView(meta).audio);
+      });
+    }
+
     // 배경음악: 슬라이드쇼당 한 곡만 유지한다(향후 확장 여지, REQ-0003 미결정 범위 밖이라 단순하게 시작).
     if (sub === 'audio' && req.method === 'POST') {
       assertKey(await loadMeta(id), req);
@@ -260,6 +281,7 @@ export function createApp({ dataDir }) {
         const previous = meta.audio;
         meta.audio = { id: newId(), file: `${newId()}.${ext}` };
         await fs.writeFile(path.join(showDir(id), 'audio', meta.audio.file), body);
+        if (previous?.cover) await fs.rm(path.join(showDir(id), 'photos', previous.cover), { force: true });
         if (previous) await fs.rm(path.join(showDir(id), 'audio', previous.file), { force: true });
         await saveMeta(meta);
         send(res, 201, publicView(meta).audio);
@@ -272,6 +294,7 @@ export function createApp({ dataDir }) {
         const meta = await loadMeta(id);
         if (meta.audio) {
           await fs.rm(path.join(showDir(id), 'audio', meta.audio.file), { force: true });
+          if (meta.audio.cover) await fs.rm(path.join(showDir(id), 'photos', meta.audio.cover), { force: true });
           meta.audio = null;
           await saveMeta(meta);
         }

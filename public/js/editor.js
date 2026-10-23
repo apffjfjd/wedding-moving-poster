@@ -186,6 +186,44 @@ function renderAudio() {
   const current = $('audioCurrent');
   current.hidden = !audio;
   if (audio) $('audioPlayer').src = audio.url;
+  $('coverFile').disabled = !audio;
+  $('coverCurrent').hidden = !audio?.cover;
+  if (audio?.cover) $('coverPreview').src = audio.cover.url;
+  else $('coverPreview').removeAttribute('src');
+}
+
+function setupCover() {
+  const status = $('coverStatus');
+  async function changeCover(file) {
+    const trackId = audio?.id;
+    if (!trackId) return;
+    $('coverFile').disabled = true;
+    $('coverRemove').disabled = true;
+    status.textContent = file ? '이미지 업로드 중…' : '이미지 삭제 중…';
+    status.classList.remove('error');
+    try {
+      const prepared = file ? await prepare(file) : null;
+      const result = await api(file ? 'POST' : 'DELETE', '/audio-cover', {
+        body: prepared?.blob,
+        headers: { 'x-audio-id': trackId, 'Content-Type': 'image/jpeg' },
+      });
+      if (audio?.id === trackId) audio = result;
+      renderAudio();
+      refreshPreview();
+      status.textContent = file ? 'LP 이미지를 등록했습니다.' : 'LP 이미지를 삭제했습니다.';
+    } catch (err) {
+      status.textContent = err.message;
+      status.classList.add('error');
+    } finally {
+      $('coverFile').value = '';
+      $('coverFile').disabled = !audio;
+      $('coverRemove').disabled = false;
+    }
+  }
+  $('coverFile').addEventListener('change', () => {
+    if ($('coverFile').files[0]) changeCover($('coverFile').files[0]);
+  });
+  $('coverRemove').addEventListener('click', () => changeCover(null));
 }
 
 function setupAudio() {
@@ -269,11 +307,17 @@ function setupUpload() {
 }
 
 function setupLinks() {
-  const playUrl = `${location.origin}/s/${showId}`;
+  const url = new URL(`/s/${showId}`, location.origin);
+  for (const id of ['frameWidth', 'frameHeight']) url.searchParams.set(id, $(id).value);
+  const playUrl = url.href;
   const editUrl = `${location.origin}/e/${showId}#key=${editKey}`;
   $('playUrl').value = playUrl;
   $('editUrl').value = editUrl;
   $('openPlay').href = playUrl;
+  previewFrame.src = playUrl;
+}
+
+function setupCopy() {
   document.querySelectorAll('[data-copy]').forEach((btn) =>
     btn.addEventListener('click', async () => {
       const input = $(btn.dataset.copy);
@@ -318,10 +362,14 @@ async function init() {
   rememberKey(editKey);
   $('app').hidden = false;
   setupLinks();
+  setupCopy();
+  for (const id of ['frameWidth', 'frameHeight']) $(id).addEventListener('input', () => {
+    if (['frameWidth', 'frameHeight'].every((key) => $(key).value && $(key).checkValidity())) setupLinks();
+  });
   setupUpload();
   setupAudio();
+  setupCover();
   setupRemove();
-  previewFrame.src = `/s/${showId}`;
   const meta = await api('GET', '');
   photos = meta.photos;
   audio = meta.audio;

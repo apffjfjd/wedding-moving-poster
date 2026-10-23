@@ -215,3 +215,28 @@ test('load: 배경음악 폴더는 비어 있어도 gone 처리되지 않는다(
   assert.equal(r.photos.length, 1);
   assert.equal(r.audio, null);
 });
+
+
+test('LP: 선택된 음악과 같은 이름의 이미지만 연결하고 음악 교체 시 변경한다', () => {
+  const files = [audioFile('a', '01_Our Song.mp3'), file('cover-b', '02_Other.jpg'),
+    file('cover-a', '01_our song.JPG'), file('hidden', '.01_Our Song.png')];
+  const first = findAudio({ files }, cfg);
+  assert.equal(first.cover.id, 'cover-a');
+  assert.equal(first.cover.url, 'https://img.test/d/cover-a=s1920');
+  assert.equal(first.cover.fallbacks.length, 1);
+  assert.equal(first.cover.viaFetch, true);
+  assert.equal(findAudio({ files: [audioFile('b', '02_Other.mp3'), ...files.slice(1)] }, cfg).cover.id, 'cover-b');
+  assert.equal(findAudio({ files: [audioFile('c', 'missing.mp3'), ...files.slice(1)] }, cfg).cover, undefined);
+});
+
+test('LP: 음악 폴더에서 음악과 이미지를 함께 조회하며 사진 목록에 표지를 넣지 않는다', async () => {
+  const result = await withFetch(async (url) => {
+    if (routeByFolder(url) === 'bgm') {
+      assert.match(new URL(url).searchParams.get('q'), /audio\/.*or.*image\//);
+      return json({ files: [audioFile('a', 'Song.mp3'), file('cover', 'Song.png')] });
+    }
+    return json({ files: [file('photo', '1.jpg')] });
+  }, () => source({ bgmFolderId: BGM_FOLDER }).load());
+  assert.equal(result.audio.cover.id, 'cover');
+  assert.deepEqual(result.photos.map((p) => p.id), ['photo']);
+});

@@ -112,3 +112,54 @@ body.idle { cursor: none; }
 }
 .audio-toggle[hidden] { display: none; }
 body.idle .audio-toggle { opacity: 0; pointer-events: none; }
+
+/* 사진 전체를 담는 흰 프레임 + LP. 배경 슬라이드는 별도 레이어로 유지한다. */
+.poster-composition {
+  position: fixed;
+  inset: 8% 4%;
+  display: grid;
+  grid-template-columns: 54fr 42fr;
+  gap: 4%;
+  pointer-events: none;
+}
+.photo-slot, .record-slot { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.photo-frame {
+  position: relative;
+  box-sizing: border-box;
+  background: #fff;
+  border: clamp(8px, 1.4vmin, 22px) solid #fff;
+  box-shadow: 0 12px 48px #0005;
+  overflow: hidden;
+}
+.photo-slide { position: absolute; inset: 0; }
+.photo-slide .fg { display: block; width: 100%; height: 100%; object-fit: contain; }
+.record {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 34%, #0005 35%, transparent 36%),
+    repeating-radial-gradient(circle, #ffffff09 0 1px, #0004 1px 3px, transparent 3px 5px),
+    conic-gradient(from 35deg, #101012, #36383c 12%, #101012 25%, #080809 47%, #46484a 62%, #111113 77%, #101012);
+  border: 2px solid #ffffff18;
+  box-sizing: border-box;
+  box-shadow: 0 14px 48px #0006, inset 0 0 25px #0009;
+}
+.record-label {
+  position: absolute;
+  inset: 31.5%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #d9c1b3;
+  box-shadow: 0 0 0 2px #ffffff25, inset 0 0 0 8px #ffffff10;
+}
+.record-art { width: 100%; height: 100%; display: block; object-fit: cover; }
+.record::after {
+  content: ''; position: absolute; width: 3.5%; aspect-ratio: 1;
+  top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #b5b5b5, #292929 40%, #080808 70%);
+  box-shadow: 0 1px 3px #0008;
+}
+@media (max-aspect-ratio: 4/5) {
+  .poster-composition { inset: 4% 7% 8%; grid-template-columns: 1fr; grid-template-rows: 62fr 34fr; gap: 4%; }
+}

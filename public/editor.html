@@ -18,6 +18,14 @@
     <div id="app" hidden>
       <section class="card">
         <h2>공유 링크</h2>
+      <div class="linkrow ratio-row">
+        <span>사진 프레임 비율</span>
+        <label for="frameWidth">가로</label><input id="frameWidth" type="number" min="1" max="20" step="0.1" value="4">
+        <span>:</span>
+        <label for="frameHeight">세로</label><input id="frameHeight" type="number" min="1" max="20" step="0.1" value="6">
+      </div>
+      <p class="muted">기본 가로 4 : 세로 6. 1~20 사이의 비율을 입력하세요. 사진 전체가 흰 프레임 안에 표시됩니다.</p>
+
         <div class="linkrow">
           <label for="playUrl">재생 URL</label>
           <input id="playUrl" type="text" readonly>
@@ -62,6 +70,17 @@
           <audio id="audioPlayer" controls style="height:36px"></audio>
           <button id="audioRemove" class="danger">삭제</button>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>LP 중앙 이미지</h2>
+        <p class="muted">배경음악을 먼저 등록한 뒤 직접 준비한 이미지를 선택하세요. 음악을 교체하면 이전 이미지가 해제됩니다. 중앙의 원형 영역에 맞춰 이미지 가장자리가 잘릴 수 있습니다.</p>
+        <input id="coverFile" type="file" accept="image/jpeg,image/png,image/webp" disabled aria-label="LP 중앙 이미지 선택">
+        <div id="coverCurrent" class="linkrow" hidden>
+          <img id="coverPreview" alt="현재 LP 이미지" style="width:80px;height:80px;border-radius:50%;object-fit:cover">
+          <button id="coverRemove" class="danger">이미지 삭제</button>
+        </div>
+        <div id="coverStatus" class="status" role="status"></div>
       </section>
 
       <section class="card">

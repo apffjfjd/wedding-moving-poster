@@ -68,12 +68,17 @@ export function toPhotos(list, { apiBase, imageBase, apiKey }) {
  * 폴더 안 오디오 파일 중 이름순 첫 번째를 배경음악으로 쓴다(여러 개면 나머지는 무시).
  * 오디오는 lh3 리사이즈 URL 같은 게 없으므로 Drive API 원본 다운로드만 쓴다.
  */
-export function findAudio(list, { apiBase, apiKey }) {
+export function findAudio(list, { apiBase, apiKey, imageBase }) {
   const file = (list.files || [])
     .filter((f) => f.mimeType?.startsWith('audio/') && !f.name.startsWith('.'))
     .sort(byName)[0];
   if (!file) return null;
+  const stem = (name) => name.replace(/\.[^.]+$/, '').normalize('NFC').trim().toLocaleLowerCase('ko');
+  const artwork = (list.files || []).filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.'))
+    .sort(byName).find((f) => stem(f.name) === stem(file.name));
+  const cover = artwork ? toPhotos({ files: [artwork] }, { apiBase, apiKey, imageBase })[0] : null;
   return {
+    ...(cover ? { cover } : {}),
     id: file.id,
     url: `${apiBase}/files/${file.id}?alt=media&key=${encodeURIComponent(apiKey)}`,
     viaFetch: true,
@@ -101,7 +106,7 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
 
   function listFiles(id, mimePrefix) {
     const params = new URLSearchParams({
-      q: `'${id}' in parents and trashed = false and mimeType contains '${mimePrefix}'`,
+      q: `'${id}' in parents and trashed = false and (${mimePrefix === 'audio/' ? "mimeType contains 'audio/' or mimeType contains 'image/'" : "mimeType contains 'image/'"})`,
       fields: 'files(id,name,mimeType,modifiedTime,thumbnailLink,imageMediaMetadata(width,height))',
       pageSize: '1000',
       key: apiKey,
@@ -139,7 +144,7 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
       if (bgmFolderId) {
         try {
           const audioRes = await listFiles(bgmFolderId, 'audio/');
-          if (audioRes.ok) audio = findAudio(await audioRes.json(), { apiBase, apiKey });
+          if (audioRes.ok) audio = findAudio(await audioRes.json(), { apiBase, apiKey, imageBase });
         } catch {
           /* 음악 폴더는 선택 사항이므로, 못 불러와도 사진 재생을 막지 않는다 */
         }
