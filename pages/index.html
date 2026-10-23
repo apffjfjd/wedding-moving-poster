@@ -48,6 +48,12 @@
         <label for="bgmFolder">배경음악 폴더 링크 <span class="muted">(선택)</span></label>
         <input id="bgmFolder" type="text" placeholder="https://drive.google.com/drive/folders/… (비워두면 음악 없음)">
       </div>
+      <div class="linkrow duration-row">
+        <label for="duration">사진 표시 시간</label>
+        <input id="duration" type="range" min="2" max="60" step="1" value="5">
+        <output id="durationValue" for="duration">5초</output>
+      </div>
+      <p class="muted">사진 한 장이 완전히 표시되는 시간입니다. 전환 애니메이션 1.6초는 별도로 적용됩니다.</p>
       <button id="make" class="primary">URL 만들기</button>
       <p id="err" class="error" hidden></p>
       <div id="result" hidden>

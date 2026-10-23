@@ -9,7 +9,8 @@
 //   audio     { url, version?, viaFetch? } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
 import { resolveEffect, layoutFor, motionFor, transitionFor, MOTION_EASING } from './effects.js';
 
-const HOLD_MS = 5000; // 사진이 정지해 보이는 시간
+import { holdMsFromSeconds } from './timing.js';
+
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
 const EMPTY_POLL_MS = 3000;
 
@@ -63,7 +64,7 @@ const safeStorage = {
   },
 };
 
-export function startPlayer({ source, stage, messageEl, hintEl }) {
+export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsFromSeconds() }) {
   const params = new URLSearchParams(location.search);
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
   const lite = params.get('lite') === '1';
@@ -255,7 +256,7 @@ export function startPlayer({ source, stage, messageEl, hintEl }) {
     stage.append(slide);
 
     const motion = motionFor(effect, flip);
-    const motionOpts = { duration: HOLD_MS + TRANS_MS * 2, easing: MOTION_EASING, fill: 'forwards' };
+    const motionOpts = { duration: holdMs + TRANS_MS * 2, easing: MOTION_EASING, fill: 'forwards' };
     if (motion.mv) mv.animate(motion.mv, motionOpts);
     if (motion.fg) fg.animate(motion.fg, motionOpts);
     if (motion.bg && bg) bg.animate(motion.bg, motionOpts);
@@ -333,7 +334,7 @@ export function startPlayer({ source, stage, messageEl, hintEl }) {
       lastId = photo.id;
       lastIndex = index;
       await present({ ...photo, url: loadedPhoto.url, width: loadedPhoto.width, height: loadedPhoto.height }, index);
-      await sleep(HOLD_MS);
+      await sleep(holdMs);
     }
   }
 

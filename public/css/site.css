@@ -62,6 +62,8 @@ input[type='text'], select {
   color: var(--ink);
 }
 
+input[type='range'] { accent-color: var(--accent); }
+
 .muted { color: var(--muted); font-size: 14px; }
 .error { color: var(--danger); }
 
@@ -69,6 +71,7 @@ input[type='text'], select {
 .linkrow { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
 .linkrow label { width: 84px; font-size: 14px; color: var(--muted); flex-shrink: 0; }
 .linkrow input { flex: 1; min-width: 220px; }
+.duration-row output { width: 42px; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* 에디터 레이아웃 */
 .layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }

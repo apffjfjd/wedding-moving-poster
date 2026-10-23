@@ -2,10 +2,17 @@
 import { EFFECTS } from './effects.js';
 import { parseFolderId } from './drive-source.js';
 import { config } from '../config.js';
+import { DEFAULT_HOLD_SECONDS } from './timing.js';
 
 const $ = (id) => document.getElementById(id);
 
 if (!config.apiKey) $('nokey').hidden = false;
+
+function updateDurationLabel() {
+  $('durationValue').textContent = `${$('duration').value}초`;
+}
+$('duration').addEventListener('input', updateDurationLabel);
+updateDurationLabel();
 
 // 효과 이름표
 const tbody = $('rules').querySelector('tbody');
@@ -47,6 +54,8 @@ function make() {
   const url = new URL('./player.html', location.href);
   url.searchParams.set('folder', folderId);
   if (bgmFolderId) url.searchParams.set('bgm', bgmFolderId);
+  const duration = Number($('duration').value);
+  if (duration !== DEFAULT_HOLD_SECONDS) url.searchParams.set('duration', String(duration));
   $('playUrl').value = url.href;
   $('open').href = url.href;
   $('result').hidden = false;
