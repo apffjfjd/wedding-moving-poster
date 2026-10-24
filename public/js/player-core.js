@@ -8,13 +8,14 @@
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
 //   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
 //   background  photo | null  — 화면 배경 이미지. 없으면 흰 배경.
-import { resolveEffect, motionFor, transitionFor, MOTION_EASING } from './effects.js';
+import { resolveEffect, transitionFor } from './effects.js';
 
-import { frameRatio } from './poster.js';
+import { frameRatio, framePath } from './poster.js';
 
 import { holdMsFromSeconds } from './timing.js';
 
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
+const GLEAM_MS = 9000; // 액자 테두리를 따라 빛이 한 바퀴 도는 시간
 const EMPTY_POLL_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,9 +77,22 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   composition.className = 'poster-composition';
   const frameSlot = document.createElement('div');
   frameSlot.className = 'photo-slot';
-  const frame = document.createElement('div');
-  frame.className = 'photo-frame';
-  frameSlot.append(frame);
+  // 액자: 그림자(뒤) > 사진(액자 윤곽으로 잘라냄) > 테두리 > 테두리를 따라 도는 빛(앞)
+  const frameBox = document.createElement('div');
+  frameBox.className = lite ? 'photo-frame lite' : 'photo-frame';
+  const svgLayer = (cls) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', cls);
+    svg.setAttribute('aria-hidden', 'true');
+    return svg;
+  };
+  const frameShadow = svgLayer('frame-shadow');
+  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 곳
+  frame.className = 'frame-clip';
+  const frameBorder = svgLayer('frame-border');
+  const frameGleam = svgLayer('frame-gleam');
+  frameBox.append(frameShadow, frame, frameBorder, frameGleam);
+  frameSlot.append(frameBox);
   const recordSlot = document.createElement('div');
   recordSlot.className = 'record-slot';
   // LP(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다.
@@ -97,10 +111,87 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   stage.after(composition);
   function sizePoster() {
     const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height) * 0.85;
-    frame.style.width = `${width}px`;
-    frame.style.height = `${width * ratio.height / ratio.width}px`;
+    const height = width * ratio.height / ratio.width;
+    frameBox.style.width = `${width}px`;
+    frameBox.style.height = `${height}px`;
+    drawFrame(width, height);
     turntable.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight) * 0.82}px`;
   }
+  /** 액자 크기가 바뀔 때마다 윤곽·테두리를 다시 그린다. 기본색 #FDE3C7(샴페인 피치) 계열. */
+  function drawFrame(w, h) {
+    if (!w || !h) return;
+    const u = Math.min(w, h);
+    const s = (k, min = 0) => Math.max(min, k * u).toFixed(2);
+    const m = Math.max(6, 0.035 * u); // 바깥 테두리선 위치(발광·장식이 들어갈 여백)
+    const outline = framePath(w, h, m);
+    const innerLine = framePath(w, h, m + Math.max(4, 0.024 * u));
+    frame.style.clipPath = `path('${outline}')`;
+
+    frameShadow.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    frameShadow.innerHTML = `
+      <defs>
+        <filter id="wmp-frame-shadow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${s(0.025)}"/></filter>
+        <mask id="wmp-frame-outside" maskUnits="userSpaceOnUse" x="${-w}" y="${-h}" width="${w * 3}" height="${h * 3}">
+          <rect x="${-w}" y="${-h}" width="${w * 3}" height="${h * 3}" fill="#fff"/><path d="${outline}" fill="#000"/>
+        </mask>
+      </defs>
+      <g mask="url(#wmp-frame-outside)">
+        <path d="${outline}" transform="translate(0 ${s(0.018)})" fill="#6b4226" fill-opacity="0.38" filter="url(#wmp-frame-shadow)"/>
+      </g>`;
+
+    frameBorder.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    frameBorder.innerHTML = `
+      <defs>
+        <linearGradient id="wmp-frame-metal" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fffaf3"/>
+          <stop offset="0.28" stop-color="#FDE3C7"/>
+          <stop offset="0.5" stop-color="#e6bb93"/>
+          <stop offset="0.72" stop-color="#FDE3C7"/>
+          <stop offset="1" stop-color="#fff4e6"/>
+        </linearGradient>
+        <filter id="wmp-frame-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${s(0.012, 2)}"/></filter>
+        <filter id="wmp-frame-inner" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${s(0.02, 3)}"/></filter>
+        <clipPath id="wmp-frame-inside"><path d="${outline}"/></clipPath>
+      </defs>
+      <path d="${outline}" fill="none" stroke="#8a5a34" stroke-opacity="0.22" stroke-width="${s(0.05)}" filter="url(#wmp-frame-inner)" clip-path="url(#wmp-frame-inside)"/>
+      <path d="${outline}" fill="none" stroke="#FDE3C7" stroke-opacity="0.85" stroke-width="${s(0.034, 4)}" filter="url(#wmp-frame-glow)"/>
+      <path d="${outline}" fill="none" stroke="#b9875c" stroke-opacity="0.55" stroke-width="${s(0.019, 3.5)}" stroke-linejoin="round"/>
+      <path d="${outline}" fill="none" stroke="url(#wmp-frame-metal)" stroke-width="${s(0.013, 2.5)}" stroke-linejoin="round"/>
+      <path d="${innerLine}" fill="none" stroke="#FDE3C7" stroke-opacity="0.8" stroke-width="${s(0.003, 1)}"/>
+      <g transform="translate(${(w / 2).toFixed(2)} ${m.toFixed(2)})" filter="url(#wmp-frame-glow)">
+        <path d="${sparkle(0.042 * u)}" fill="#fff6ea"/>
+      </g>
+      <path d="${sparkle(0.032 * u)}" transform="translate(${(w / 2).toFixed(2)} ${m.toFixed(2)})" fill="url(#wmp-frame-metal)" stroke="#fffaf3" stroke-width="0.8"/>`;
+
+    // 빛 한 줄기가 테두리를 따라 돌며 잔상을 남긴다. 길이가 다른 대시를 앞끝에 맞춰 겹쳐 꼬리를 만든다.
+    // pathLength=1000으로 정규화하고, 각 대시를 (길이 - 머리 길이)만큼 뒤로 보정한 위치에서 한 바퀴씩 돌린다.
+    const trail = [
+      { len: 320, width: s(0.016, 3), color: '#FDE3C7', opacity: 0.28 },
+      { len: 170, width: s(0.012, 2.5), color: '#ffeedd', opacity: 0.45 },
+      { len: 80, width: s(0.009, 2), color: '#fff6ec', opacity: 0.7 },
+      { len: 26, width: s(0.03, 5), color: '#FDE3C7', opacity: 0.35 },
+      { len: 18, width: s(0.007, 1.5), color: '#ffffff', opacity: 1 },
+    ];
+    const head = trail[trail.length - 1].len;
+    frameGleam.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    frameGleam.innerHTML = trail.map((t) => `
+      <path d="${outline}" pathLength="1000" fill="none" stroke="${t.color}" stroke-opacity="${t.opacity}" stroke-width="${t.width}"
+        stroke-linecap="round" stroke-dasharray="${t.len} ${1000 - t.len}"/>`).join('');
+    if (lite || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    [...frameGleam.children].forEach((path, i) => {
+      const o = trail[i].len - head;
+      const anim = path.animate([{ strokeDashoffset: o }, { strokeDashoffset: o - 1000 }], { duration: GLEAM_MS, iterations: Infinity });
+      anim.currentTime = performance.now() % GLEAM_MS; // 크기 변경으로 다시 그려도 빛의 위치가 이어지게 한다
+    });
+  }
+
+  /** 아치 꼭대기의 네 갈래 별 장식 */
+  function sparkle(r) {
+    const k = r * 0.22;
+    const f = (n) => n.toFixed(2);
+    return `M0,${f(-r)} Q${f(k)},${f(-k)} ${f(r)},0 Q${f(k)},${f(k)} 0,${f(r)} Q${f(-k)},${f(k)} ${f(-r)},0 Q${f(-k)},${f(-k)} 0,${f(-r)} Z`;
+  }
+
   new ResizeObserver(sizePoster).observe(composition);
   sizePoster();
   let coverKey = null;
@@ -160,7 +251,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   let photos = null; // 마지막으로 받은 사진 목록. null이면 아직 한 번도 받지 못함
   let lastId = null;
   let lastIndex = -1;
-  let sequence = 0; // 슬라이드 방향(팬/Ken Burns 좌우 번갈아)용 누적 카운터
   let wakeFromEmpty = null; // 사진이 없어 대기 중일 때, 사진이 생기면 즉시 깨우는 콜백
 
   // ---- 배경음악 (반복 재생 1곡) ----
@@ -334,31 +424,20 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     return img;
   }
 
-  /** 사진 하나를 화면에 올리고 등장 전환 + 정지 구간 모션을 시작한다. */
+  /** 사진 하나를 화면에 올리고 등장 전환을 시작한다. */
   function present(photo, index) {
-    // 실제 이미지 크기로 효과를 선택한다. 원본은 프레임 안에 잘림 없이 고정하고,
-    // 프레임 비율과 달라 남는 여백은 같은 사진을 흐리게 확대한 레이어로 채운다.
+    // 원본은 프레임 안에 잘림 없이 고정한다. 프레임 비율과 달라 남는 여백은 비워 두어
+    // .frame-clip의 반투명 바탕 너머로 화면 배경이 비쳐 보이게 한다.
     const effect = resolveEffect(photo, index, { lite });
-    const flip = sequence++ % 2 === 1;
 
     const photoSlide = document.createElement('div');
     photoSlide.className = 'photo-slide';
     photoSlide.dataset.photoId = photo.id; // 디버깅/자동 검증용
     photoSlide.dataset.effect = effect;
-    const mv = document.createElement('div');
-    mv.className = 'mv';
-    const bg = makeImg(photo.url, 'bg');
-    mv.append(bg);
-    photoSlide.append(mv, makeImg(photo.url, 'fg'));
+    photoSlide.append(makeImg(photo.url, 'fg'));
 
     const previous = [...frame.children];
     frame.append(photoSlide);
-
-    const motion = motionFor(effect, flip);
-    const motionOpts = { duration: holdMs + TRANS_MS * 2, easing: MOTION_EASING, fill: 'forwards' };
-    if (motion.mv) mv.animate(motion.mv, motionOpts);
-    // 원본은 고정 contain으로 유지하고 모션은 블러 여백에만 적용한다.
-    if (motion.bg) bg.animate(motion.bg, motionOpts);
 
     const t = transitionFor(effect);
     photoSlide.animate(t.enter, {
@@ -367,11 +446,11 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       easing: 'ease-in-out',
       fill: 'both',
     });
-    if (t.fadeOutPrev) {
-      previous.forEach((el) =>
-        el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: TRANS_MS * t.enterDelayRatio, easing: 'ease-in', fill: 'forwards' }),
-      );
-    }
+    // 여백이 비쳐 보이므로 새 사진이 이전 사진을 덮지 못한다. 이전 사진도 항상 함께 사라지게 한다.
+    const fadeOutMs = t.fadeOutPrev ? TRANS_MS * t.enterDelayRatio : TRANS_MS;
+    previous.forEach((el) =>
+      el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fadeOutMs, easing: 'ease-in', fill: 'forwards' }),
+    );
 
     // 전환이 끝나 새 사진이 프레임을 완전히 덮으면 이전 슬라이드를 제거해 메모리를 회수한다.
     return sleep(TRANS_MS).then(() => previous.forEach((el) => el.remove()));
