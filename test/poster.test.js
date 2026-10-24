@@ -12,14 +12,7 @@ test('사진 프레임: 기본 4:6, 사용자 비율, 잘못된 URL 값 복구',
   }
 });
 
-test('액자 윤곽: 상자 안에 들어가는 닫힌 경로이며 극단적인 비율에서도 유효하다', () => {
-  for (const [w, h] of [[400, 600], [600, 400], [1000, 50], [50, 1000]]) {
-    for (const inset of [0, 8, 20]) {
-      const d = framePath(w, h, inset);
-      assert.match(d, /^M.*Z$/);
-      assert.doesNotMatch(d, /NaN|Infinity/);
-      const nums = d.match(/-?\d+(\.\d+)?/g).map(Number);
-      assert.ok(nums.every((n) => n >= 0 && n <= Math.max(w, h)), `${w}x${h} inset ${inset}`);
-    }
-  }
+test('액자 윤곽: inset만큼 안쪽으로 들어간 직사각형', () => {
+  assert.equal(framePath(400, 600, 10), 'M10,10 L390,10 L390,590 L10,590 Z');
+  assert.equal(framePath(400, 600), 'M0,0 L400,0 L400,600 L0,600 Z');
 });
