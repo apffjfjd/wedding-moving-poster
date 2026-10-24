@@ -103,8 +103,7 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   position: absolute; inset: 0; width: 100%; height: 100%;
   overflow: visible; pointer-events: none;
 }
-/* 테두리를 따라 도는 빛(잔상 꼬리 포함)은 player-core.js에서 움직인다. 저사양 모드에서는 끈다 */
-.photo-frame.lite .frame-gleam { display: none; }
+/* 반딧불 깜빡임과 테두리를 도는 빛은 player-core.js에서 움직인다(저사양·동작 줄이기에서는 멈춤) */
 /* 슬라이드 하나: 래퍼(.photo-slide, opacity/filter 전환) > 원본(.fg) */
 .photo-slide { position: absolute; inset: 0; overflow: hidden; will-change: opacity; }
 .photo-slide img {
@@ -156,7 +155,6 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .record { animation: none; }
-  .frame-gleam { display: none; }
 }
 .record-art { width: 100%; height: 100%; display: block; object-fit: cover; }
 .record::after {
