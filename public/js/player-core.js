@@ -96,7 +96,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   composition.append(frameSlot, recordSlot);
   stage.after(composition);
   function sizePoster() {
-    const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height);
+    const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height) * 0.85;
     frame.style.width = `${width}px`;
     frame.style.height = `${width * ratio.height / ratio.width}px`;
     turntable.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight) * 0.82}px`;

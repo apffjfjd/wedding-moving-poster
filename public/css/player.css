@@ -85,7 +85,7 @@ body.idle { cursor: none; }
 .audio-toggle[hidden] { display: none; }
 body.idle .audio-toggle { opacity: 0; pointer-events: none; }
 
-/* 사진 전체를 담는 흰 프레임 + LP. 화면 배경(#stage)은 별도 레이어다. */
+/* 사진 전체를 담는 프레임 + LP. 화면 배경(#stage)은 별도 레이어다. */
 .poster-composition {
   position: fixed;
   inset: 8% 4%;
@@ -97,9 +97,6 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
 .photo-slot, .record-slot { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .photo-frame {
   position: relative;
-  box-sizing: border-box;
-  background: #fff;
-  border: clamp(8px, 1.4vmin, 22px) solid #fff;
   box-shadow: 0 12px 48px #0005;
   overflow: hidden;
 }
