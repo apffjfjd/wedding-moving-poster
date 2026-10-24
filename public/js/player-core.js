@@ -80,6 +80,13 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   frameSlot.append(frame);
   const recordSlot = document.createElement('div');
   recordSlot.className = 'record-slot';
+  // LP(회전) + 고정 광택 + 톤암. 음악이 실제로 재생될 때만 돌고 바늘이 올라간다.
+  const turntable = document.createElement('div');
+  turntable.className = 'turntable';
+  const tonearm = document.createElement('div');
+  tonearm.className = 'tonearm';
+  const tonearmBase = document.createElement('div');
+  tonearmBase.className = 'tonearm-base';
   const record = document.createElement('div');
   record.className = 'record';
   record.setAttribute('role', 'img');
@@ -87,14 +94,16 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const label = document.createElement('div');
   label.className = 'record-label';
   record.append(label);
-  recordSlot.append(record);
+  turntable.append(record, tonearm, tonearmBase);
+  recordSlot.append(turntable);
   composition.append(frameSlot, recordSlot);
   stage.after(composition);
   function sizePoster() {
     const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height);
     frame.style.width = `${width}px`;
     frame.style.height = `${width * ratio.height / ratio.width}px`;
-    record.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight)}px`;
+    // 톤암이 오른쪽 위로 나갈 자리를 남기도록 LP를 칸보다 작게 그린다.
+    turntable.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight) * 0.82}px`;
   }
   new ResizeObserver(sizePoster).observe(composition);
   sizePoster();
@@ -167,6 +176,10 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     updateMuteBtn();
   }
 
+  function setSpinning(value) {
+    turntable.classList.toggle('playing', value);
+  }
+
   function attemptPlay() {
     audioEl?.play().catch(() => {
       /* 자동재생 차단: 클릭이나 F 키를 받으면 다시 시도한다 */
@@ -183,6 +196,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       if (audioEl.src.startsWith('blob:')) URL.revokeObjectURL(audioEl.src);
       audioEl.remove();
       audioEl = null;
+      setSpinning(false);
     }
     if (!audio) {
       updateMuteBtn();
@@ -205,6 +219,13 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     audioEl.muted = muted;
     audioEl.src = src;
     audioEl.style.display = 'none';
+    const el = audioEl;
+    el.addEventListener('playing', () => el === audioEl && setSpinning(true));
+    for (const type of ['pause', 'ended', 'emptied']) {
+      el.addEventListener(type, () => el === audioEl && setSpinning(false));
+    }
+    // 미리보기 iframe은 소리를 내지 않으므로, 음악이 등록돼 있으면 재생 중인 모습으로 보여 준다.
+    if (embedded) setSpinning(true);
     document.body.append(audioEl);
     updateMuteBtn();
     updateHint();
