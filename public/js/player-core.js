@@ -15,7 +15,6 @@ import { frameRatio, framePath } from './poster.js';
 import { holdMsFromSeconds } from './timing.js';
 
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
-const GLEAM_MS = 9000; // 액자 테두리를 따라 빛이 한 바퀴 도는 시간
 const EMPTY_POLL_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,7 +76,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   composition.className = 'poster-composition';
   const frameSlot = document.createElement('div');
   frameSlot.className = 'photo-slot';
-  // 액자: 그림자(뒤) > 사진(액자 윤곽으로 잘라냄) > 테두리 > 테두리를 따라 도는 빛(앞)
+  // 액자: 그림자(뒤) > 사진(액자 윤곽으로 잘라냄) > 테두리(앞)
   const frameBox = document.createElement('div');
   frameBox.className = 'photo-frame';
   const svgLayer = (cls) => {
@@ -90,8 +89,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 곳
   frame.className = 'frame-clip';
   const frameBorder = svgLayer('frame-border');
-  const frameGleam = svgLayer('frame-gleam');
-  frameBox.append(frameShadow, frame, frameBorder, frameGleam);
+  frameBox.append(frameShadow, frame, frameBorder);
   frameSlot.append(frameBox);
   const recordSlot = document.createElement('div');
   recordSlot.className = 'record-slot';
@@ -125,7 +123,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     const m = Math.max(6, 0.03 * u); // 테두리선 위치(번짐·반딧불이 들어갈 여백)
     const outline = framePath(w, h, m);
     frame.style.clipPath = `path('${outline}')`;
-    const motion = !lite && !matchMedia('(prefers-reduced-motion: reduce)').matches;
     const rand = seeded(7); // 크기가 바뀌어도 같은 무늬가 나오도록 고정 시드
 
     frameShadow.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -169,7 +166,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       ${trace(mainDash, '#fff3e2', s(0.0022, 0.9), 1)}
       ${trace(dashes(rand, [8, 60], [6, 40]), '#f5cfa6', s(0.0016, 0.7), 0.75, m + Math.max(1.5, 0.006 * u))}`;
 
-    // 반딧불: 테두리 주변에 흩어진 작은 빛 알갱이가 저마다 다른 박자로 깜빡인다.
+    // 반딧불: 테두리 주변에 크기·밝기가 제각각인 작은 빛 알갱이를 흩어 둔다(움직이지 않음).
     const measure = frameBorder.querySelector('clipPath path'); // 액자 윤곽 그대로
     const total = measure.getTotalLength();
     const flies = [];
@@ -184,25 +181,11 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         x: p.x - ((q.y - p.y) / len) * off,
         y: p.y + ((q.x - p.x) / len) * off,
         r: Math.max(2, 0.009 * u) * (0.5 + rand()),
-        dim: 0.2 + rand() * 0.25,
-        peak: 0.8 + rand() * 0.2,
-        period: 2200 + rand() * 4200,
-        phase: rand(),
+        opacity: 0.45 + rand() * 0.55,
       });
     }
 
-    // 테두리를 따라 도는 반딧불 한 마리. 길이가 다른 대시를 앞끝에 맞춰 겹쳐 가늘게 사라지는 꼬리를 만든다.
-    // pathLength=1000으로 정규화하고, 각 대시를 (길이 - 머리 길이)만큼 뒤로 보정한 위치에서 한 바퀴씩 돌린다.
-    const trail = [
-      { len: 260, width: s(0.0025, 1), color: '#FDE3C7', opacity: 0.35 },
-      { len: 110, width: s(0.003, 1.2), color: '#fff1df', opacity: 0.6 },
-      { len: 30, width: s(0.004, 1.5), color: '#fff8ee', opacity: 0.9 },
-      { len: 3, width: s(0.022, 7), color: '#FDE3C7', opacity: 0.3 },
-      { len: 2, width: s(0.007, 2.5), color: '#ffffff', opacity: 1 },
-    ];
-    const head = trail[trail.length - 1].len;
-    frameGleam.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    frameGleam.innerHTML = `
+    frameBorder.insertAdjacentHTML('beforeend', `
       <defs>
         <radialGradient id="wmp-firefly">
           <stop offset="0" stop-color="#fffaf0"/>
@@ -211,22 +194,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
           <stop offset="1" stop-color="#FDE3C7" stop-opacity="0"/>
         </radialGradient>
       </defs>
-      ${flies.map((f) => `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(f.r * 3).toFixed(2)}" fill="url(#wmp-firefly)" opacity="${f.peak.toFixed(2)}"/>`).join('')}
-      ${motion ? trail.map((t) => `
-      <path class="gleam" d="${outline}" pathLength="1000" fill="none" stroke="${t.color}" stroke-opacity="${t.opacity}" stroke-width="${t.width}"
-        stroke-linecap="round" stroke-dasharray="${t.len} ${1000 - t.len}"/>`).join('') : ''}`;
-    if (!motion) return;
-    const now = performance.now();
-    frameGleam.querySelectorAll('circle').forEach((dot, k) => {
-      const f = flies[k];
-      const anim = dot.animate([{ opacity: f.dim }, { opacity: f.peak }, { opacity: f.dim }], { duration: f.period, iterations: Infinity, easing: 'ease-in-out' });
-      anim.currentTime = now + f.phase * f.period;
-    });
-    frameGleam.querySelectorAll('.gleam').forEach((path, i) => {
-      const o = trail[i].len - head;
-      const anim = path.animate([{ strokeDashoffset: o }, { strokeDashoffset: o - 1000 }], { duration: GLEAM_MS, iterations: Infinity });
-      anim.currentTime = now % GLEAM_MS; // 크기 변경으로 다시 그려도 빛의 위치가 이어지게 한다
-    });
+      ${flies.map((f) => `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(f.r * 3).toFixed(2)}" fill="url(#wmp-firefly)" opacity="${f.opacity.toFixed(2)}"/>`).join('')}`);
   }
 
   /** 고정 시드 난수(0~1). 테두리의 불규칙한 무늬가 매번 같게 나오게 한다. */
