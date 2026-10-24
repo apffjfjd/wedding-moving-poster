@@ -36,6 +36,7 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024; // server.js LIMITS.maxAudioBytes 와 
 const editKey = findKey();
 let photos = [];
 let audio = null;
+let background = null;
 
 async function api(method, path, { body, headers = {} } = {}) {
   const res = await fetch(`/api/slideshows/${showId}${path}`, {
@@ -179,6 +180,45 @@ async function uploadFiles(fileList) {
   refreshPreview();
   if (failed.length) setStatus(`${files.length - failed.length}장 업로드, ${failed.length}장 실패 — ${failed.join(' / ')}`, true);
   else setStatus(`${files.length}장을 업로드했습니다.`);
+}
+
+// ---- 배경 이미지 ----
+function renderBackground() {
+  $('backgroundCurrent').hidden = !background;
+  if (background) $('backgroundPreview').src = background.url;
+  else $('backgroundPreview').removeAttribute('src');
+}
+
+function setupBackground() {
+  const status = $('backgroundStatus');
+  async function changeBackground(file) {
+    $('backgroundFile').disabled = true;
+    $('backgroundRemove').disabled = true;
+    status.textContent = file ? '배경 업로드 중…' : '배경 삭제 중…';
+    status.classList.remove('error');
+    try {
+      const prepared = file ? await prepare(file) : null;
+      const meta = await api(file ? 'POST' : 'DELETE', '/background', {
+        body: prepared?.blob,
+        headers: { 'Content-Type': 'image/jpeg' },
+      });
+      background = meta.background;
+      renderBackground();
+      refreshPreview();
+      status.textContent = file ? '배경 이미지를 등록했습니다.' : '배경 이미지를 삭제했습니다. 흰 배경으로 표시됩니다.';
+    } catch (err) {
+      status.textContent = err.message;
+      status.classList.add('error');
+    } finally {
+      $('backgroundFile').value = '';
+      $('backgroundFile').disabled = false;
+      $('backgroundRemove').disabled = false;
+    }
+  }
+  $('backgroundFile').addEventListener('change', () => {
+    if ($('backgroundFile').files[0]) changeBackground($('backgroundFile').files[0]);
+  });
+  $('backgroundRemove').addEventListener('click', () => changeBackground(null));
 }
 
 // ---- 배경음악 ----
@@ -367,13 +407,16 @@ async function init() {
     if (['frameWidth', 'frameHeight'].every((key) => $(key).value && $(key).checkValidity())) setupLinks();
   });
   setupUpload();
+  setupBackground();
   setupAudio();
   setupCover();
   setupRemove();
   const meta = await api('GET', '');
   photos = meta.photos;
   audio = meta.audio;
+  background = meta.background;
   render();
+  renderBackground();
   renderAudio();
 }
 

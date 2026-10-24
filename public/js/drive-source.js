@@ -38,45 +38,55 @@ export function parsePhotoName(name) {
 /** 이름순(숫자는 크기순: 2 < 10) 정렬 비교 함수 */
 const byName = (a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true, sensitivity: 'base' }) || a.id.localeCompare(b.id);
 
+/** 확장자를 뺀 비교용 파일명 (한글 자모 조합·대소문자·앞뒤 공백 무시) */
+const stem = (name) => name.replace(/\.[^.]+$/, '').normalize('NFC').trim().toLocaleLowerCase('ko');
+
+/** 사진 폴더에서 이 이름(확장자 무관)의 이미지는 슬라이드가 아니라 화면 배경으로 쓴다. */
+export const BACKGROUND_NAMES = ['background', '배경'];
+const isBackground = (f) => BACKGROUND_NAMES.includes(stem(f.name));
+
 /**
- * Drive API files.list 응답을 재생기용 사진 목록으로 바꾼다.
+ * 드라이브 이미지 파일 하나를 재생기용 사진으로 바꾼다.
  * 이미지는 (1) lh3 리사이즈 URL → (2) API가 준 썸네일 → (3) API 원본 다운로드 순으로 시도한다.
  * 크기(width/height)는 재생기가 실제 이미지를 불러온 뒤 측정하므로 여기서는 참고용이다.
  */
-export function toPhotos(list, { apiBase, imageBase, apiKey }) {
+function toPhoto(f, { apiBase, imageBase, apiKey }) {
+  const fallbacks = [];
+  if (f.thumbnailLink) fallbacks.push(f.thumbnailLink.replace(/=s\d+(-c)?$/, '') + '=s1920');
+  fallbacks.push(`${apiBase}/files/${f.id}?alt=media&key=${encodeURIComponent(apiKey)}`);
+  return {
+    id: f.id,
+    url: `${imageBase}/${f.id}=s1920`,
+    fallbacks,
+    viaFetch: true,
+    version: f.modifiedTime,
+    width: f.imageMediaMetadata?.width,
+    height: f.imageMediaMetadata?.height,
+    effect: parsePhotoName(f.name).effect,
+  };
+}
+
+/** Drive API files.list 응답을 재생기용 사진 목록으로 바꾼다. 배경 이미지는 슬라이드에서 뺀다. */
+export function toPhotos(list, config) {
   return (list.files || [])
-    .filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.'))
+    .filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.') && !isBackground(f))
     .sort(byName)
-    .map((f) => {
-      const fallbacks = [];
-      if (f.thumbnailLink) fallbacks.push(f.thumbnailLink.replace(/=s\d+(-c)?$/, '') + '=s1920');
-      fallbacks.push(`${apiBase}/files/${f.id}?alt=media&key=${encodeURIComponent(apiKey)}`);
-      return {
-        id: f.id,
-        url: `${imageBase}/${f.id}=s1920`,
-        fallbacks,
-        viaFetch: true,
-        version: f.modifiedTime,
-        width: f.imageMediaMetadata?.width,
-        height: f.imageMediaMetadata?.height,
-        effect: parsePhotoName(f.name).effect,
-      };
-    });
+    .map((f) => toPhoto(f, config));
 }
 
 /**
  * 폴더 안 오디오 파일 중 이름순 첫 번째를 배경음악으로 쓴다(여러 개면 나머지는 무시).
  * 오디오는 lh3 리사이즈 URL 같은 게 없으므로 Drive API 원본 다운로드만 쓴다.
  */
-export function findAudio(list, { apiBase, apiKey, imageBase }) {
+export function findAudio(list, config) {
+  const { apiBase, apiKey } = config;
   const file = (list.files || [])
     .filter((f) => f.mimeType?.startsWith('audio/') && !f.name.startsWith('.'))
     .sort(byName)[0];
   if (!file) return null;
-  const stem = (name) => name.replace(/\.[^.]+$/, '').normalize('NFC').trim().toLocaleLowerCase('ko');
   const artwork = (list.files || []).filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.'))
     .sort(byName).find((f) => stem(f.name) === stem(file.name));
-  const cover = artwork ? toPhotos({ files: [artwork] }, { apiBase, apiKey, imageBase })[0] : null;
+  const cover = artwork ? toPhoto(artwork, config) : null;
   return {
     ...(cover ? { cover } : {}),
     id: file.id,
@@ -84,6 +94,12 @@ export function findAudio(list, { apiBase, apiKey, imageBase }) {
     viaFetch: true,
     version: file.modifiedTime,
   };
+}
+
+/** 사진 폴더의 배경 이미지(BACKGROUND_NAMES). 여러 개면 이름순 첫 번째, 없으면 null. */
+export function findBackground(list, config) {
+  const file = (list.files || []).filter((f) => f.mimeType?.startsWith('image/') && isBackground(f)).sort(byName)[0];
+  return file ? toPhoto(file, config) : null;
 }
 
 /**
@@ -136,7 +152,9 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
       }
       if (!res.ok) return { status: 'offline' };
 
-      const photos = toPhotos(await res.json(), { apiBase, imageBase, apiKey });
+      const list = await res.json();
+      const photos = toPhotos(list, { apiBase, imageBase, apiKey });
+      const background = findBackground(list, { apiBase, imageBase, apiKey });
       // 공유되지 않은/없는 폴더도 목록은 빈 채로 200이 오므로, 비어 있으면 폴더 접근 가능 여부를 확인한다.
       if (!photos.length && !(await folderExists(folderId))) return { status: 'gone' };
 
@@ -150,7 +168,7 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
         }
       }
 
-      return { status: 'ok', photos, audio };
+      return { status: 'ok', photos, audio, background };
     },
   };
 }
