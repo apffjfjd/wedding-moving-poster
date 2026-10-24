@@ -1,5 +1,5 @@
 // 편집기: 사진 업로드(FR-001), 비율 감지 표시(FR-003), 효과 지정(FR-002), URL 안내(FR-004)
-import { EFFECTS, orientationOf } from '/js/effects.js';
+import { EFFECTS, currentEffect, orientationOf } from '/js/effects.js';
 
 const MAX_SIDE = 1920; // 고해상도 원본을 그대로 쓰면 로딩/메모리 부담이 크므로 업로드 전에 축소한다.
 const JPEG_QUALITY = 0.86;
@@ -100,7 +100,7 @@ function render() {
       const option = document.createElement('option');
       option.value = effect.id;
       option.textContent = effect.label;
-      option.selected = effect.id === photo.effect;
+      option.selected = effect.id === currentEffect(photo.effect); // 예전 확대·이동 효과는 크로스 디졸브로 표시
       select.append(option);
     }
     select.addEventListener('change', async () => {
@@ -110,7 +110,7 @@ function render() {
         photo.effect = select.value;
         refreshPreview();
       } catch (err) {
-        select.value = previous;
+        select.value = currentEffect(previous);
         setStatus(err.message, true);
       }
     });
