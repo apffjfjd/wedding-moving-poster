@@ -159,6 +159,7 @@ export function createApp({ dataDir }) {
     })),
     // 파일명이 업로드마다 새로 생기므로, url 자체가 재생기 입장의 버전 값이 된다.
     audio: meta.audio ? { id: meta.audio.id, url: `/audio/${meta.id}/${meta.audio.file}`, cover: meta.audio.cover ? { url: `/photos/${meta.id}/${meta.audio.cover}` } : null } : null,
+    background: meta.background ? { url: `/photos/${meta.id}/${meta.background}` } : null,
   });
 
   const clampDim = (v) => {
@@ -265,6 +266,27 @@ export function createApp({ dataDir }) {
         await saveMeta(meta);
         if (previous) await fs.rm(path.join(showDir(id), 'photos', previous), { force: true });
         send(res, 200, publicView(meta).audio);
+      });
+    }
+
+    // 화면 배경 이미지: 슬라이드쇼당 한 장. 새로 올리면 이전 파일을 지운다.
+    if (sub === 'background' && (req.method === 'POST' || req.method === 'DELETE')) {
+      assertKey(await loadMeta(id), req);
+      const body = req.method === 'POST' ? await readBody(req, LIMITS.maxPhotoBytes) : null;
+      const ext = body ? sniffImage(body) : null;
+      if (body && !ext) throw new HttpError(415, 'JPEG, PNG, WebP 이미지만 업로드할 수 있습니다.');
+      return withLock(id, async () => {
+        const meta = await loadMeta(id);
+        const previous = meta.background;
+        if (body) {
+          const file = `${newId()}.${ext}`;
+          await fs.mkdir(path.join(showDir(id), 'photos'), { recursive: true });
+          await fs.writeFile(path.join(showDir(id), 'photos', file), body);
+          meta.background = file;
+        } else delete meta.background;
+        await saveMeta(meta);
+        if (previous) await fs.rm(path.join(showDir(id), 'photos', previous), { force: true });
+        send(res, 200, publicView(meta));
       });
     }
 

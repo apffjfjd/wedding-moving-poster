@@ -7,6 +7,7 @@
 //   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
 //   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
+//   background  photo | null  — 화면 배경 이미지. 없으면 흰 배경.
 import { resolveEffect, motionFor, transitionFor, MOTION_EASING } from './effects.js';
 
 import { frameRatio } from './poster.js';
@@ -80,13 +81,9 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   frameSlot.append(frame);
   const recordSlot = document.createElement('div');
   recordSlot.className = 'record-slot';
-  // LP(회전) + 고정 광택 + 톤암. 음악이 실제로 재생될 때만 돌고 바늘이 올라간다.
+  // LP(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다.
   const turntable = document.createElement('div');
   turntable.className = 'turntable';
-  const tonearm = document.createElement('div');
-  tonearm.className = 'tonearm';
-  const tonearmBase = document.createElement('div');
-  tonearmBase.className = 'tonearm-base';
   const record = document.createElement('div');
   record.className = 'record';
   record.setAttribute('role', 'img');
@@ -94,7 +91,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const label = document.createElement('div');
   label.className = 'record-label';
   record.append(label);
-  turntable.append(record, tonearm, tonearmBase);
+  turntable.append(record);
   recordSlot.append(turntable);
   composition.append(frameSlot, recordSlot);
   stage.after(composition);
@@ -102,7 +99,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height);
     frame.style.width = `${width}px`;
     frame.style.height = `${width * ratio.height / ratio.width}px`;
-    // 톤암이 오른쪽 위로 나갈 자리를 남기도록 LP를 칸보다 작게 그린다.
     turntable.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight) * 0.82}px`;
   }
   new ResizeObserver(sizePoster).observe(composition);
@@ -132,6 +128,32 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       if (loadedCover.url.startsWith('blob:')) coverBlob = loadedCover.url;
       label.append(makeImg(loadedCover.url, 'record-art'));
     } else coverKey = null; // 다음 갱신에서 재시도
+  }
+  // 화면 배경은 stage에 한 장만 깐다. 없으면 stage의 흰 배경이 그대로 보인다.
+  let backgroundKey = null;
+  let backgroundSequence = 0;
+  let backgroundBlob = null;
+  async function syncBackground(background) {
+    const key = background ? `${background.url}:${background.version || ''}` : null;
+    if (key === backgroundKey) return;
+    backgroundKey = key;
+    const token = ++backgroundSequence;
+    let loadedBackground = null;
+    for (const url of background ? [background.url, ...(background.fallbacks || [])] : []) {
+      loadedBackground = await tryLoad(url, background.viaFetch);
+      if (loadedBackground) break;
+    }
+    if (token !== backgroundSequence) {
+      if (loadedBackground?.url.startsWith('blob:')) URL.revokeObjectURL(loadedBackground.url);
+      return;
+    }
+    if (background && !loadedBackground) {
+      backgroundKey = null; // 다음 갱신에서 재시도(그동안 이전 배경 유지)
+      return;
+    }
+    stage.replaceChildren(...(loadedBackground ? [makeImg(loadedBackground.url, 'backdrop')] : []));
+    if (backgroundBlob) URL.revokeObjectURL(backgroundBlob);
+    backgroundBlob = loadedBackground?.url.startsWith('blob:') ? loadedBackground.url : null;
   }
   const embedded = window.self !== window.top; // 편집 화면 미리보기 iframe 여부
 
@@ -256,6 +278,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         wakeFromEmpty?.();
         warmUp();
       }
+      syncBackground(result.background || null);
       syncCover(result.audio?.cover || null);
       syncAudio(result.audio || null);
     }
@@ -313,51 +336,45 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
 
   /** 사진 하나를 화면에 올리고 등장 전환 + 정지 구간 모션을 시작한다. */
   function present(photo, index) {
-    // 실제 이미지 크기로 효과를 선택하고, 원본은 흰 프레임에 고정한다.
+    // 실제 이미지 크기로 효과를 선택한다. 원본은 프레임 안에 잘림 없이 고정하고,
+    // 프레임 비율과 달라 남는 여백은 같은 사진을 흐리게 확대한 레이어로 채운다.
     const effect = resolveEffect(photo, index, { lite });
-    const layout = 'blur-contain';
     const flip = sequence++ % 2 === 1;
 
-    const slide = document.createElement('div');
-    slide.className = `slide ${layout}`;
-    slide.dataset.photoId = photo.id; // 디버깅/자동 검증용
-    slide.dataset.effect = effect;
-    const mv = document.createElement('div');
-    mv.className = 'mv';
-    const bg = layout === 'blur-contain' ? makeImg(photo.url, 'bg') : null;
-    const fg = makeImg(photo.url, 'fg');
-    if (bg) mv.append(bg);
     const photoSlide = document.createElement('div');
     photoSlide.className = 'photo-slide';
-    photoSlide.append(fg);
-    slide.append(mv);
+    photoSlide.dataset.photoId = photo.id; // 디버깅/자동 검증용
+    photoSlide.dataset.effect = effect;
+    const mv = document.createElement('div');
+    mv.className = 'mv';
+    const bg = makeImg(photo.url, 'bg');
+    mv.append(bg);
+    photoSlide.append(mv, makeImg(photo.url, 'fg'));
 
-    const previous = [...stage.children];
-    const previousPhotos = [...frame.children];
+    const previous = [...frame.children];
     frame.append(photoSlide);
-    stage.append(slide);
 
     const motion = motionFor(effect, flip);
     const motionOpts = { duration: holdMs + TRANS_MS * 2, easing: MOTION_EASING, fill: 'forwards' };
     if (motion.mv) mv.animate(motion.mv, motionOpts);
-    // 원본은 고정 contain으로 유지하고 모션은 블러 배경에만 적용한다.
-    if (motion.bg && bg) bg.animate(motion.bg, motionOpts);
+    // 원본은 고정 contain으로 유지하고 모션은 블러 여백에만 적용한다.
+    if (motion.bg) bg.animate(motion.bg, motionOpts);
 
     const t = transitionFor(effect);
-    for (const layer of [slide, photoSlide]) layer.animate(t.enter, {
+    photoSlide.animate(t.enter, {
       duration: TRANS_MS * (1 - t.enterDelayRatio),
       delay: TRANS_MS * t.enterDelayRatio,
       easing: 'ease-in-out',
       fill: 'both',
     });
     if (t.fadeOutPrev) {
-      [...previous, ...previousPhotos].forEach((el) =>
+      previous.forEach((el) =>
         el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: TRANS_MS * t.enterDelayRatio, easing: 'ease-in', fill: 'forwards' }),
       );
     }
 
-    // 전환이 끝나 새 사진이 화면을 완전히 덮으면 이전 슬라이드를 제거해 메모리를 회수한다.
-    return sleep(TRANS_MS).then(() => [...previous, ...previousPhotos].forEach((el) => el.remove()));
+    // 전환이 끝나 새 사진이 프레임을 완전히 덮으면 이전 슬라이드를 제거해 메모리를 회수한다.
+    return sleep(TRANS_MS).then(() => previous.forEach((el) => el.remove()));
   }
 
   /** 다음에 보여 줄 사진의 인덱스. 재생 중 사진이 추가/삭제돼도 흐름이 자연스럽게 이어지게 한다. */
@@ -382,7 +399,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     let failures = 0;
     for (;;) {
       if (!photos.length) {
-        stage.replaceChildren();
         frame.replaceChildren();
         lastId = null;
         lastIndex = -1;

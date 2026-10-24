@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFolderId, parsePhotoName, toPhotos, findAudio, createDriveSource } from '../public/js/drive-source.js';
+import { parseFolderId, parsePhotoName, toPhotos, findAudio, findBackground, createDriveSource } from '../public/js/drive-source.js';
 
 const FOLDER = '1AbCdEfGhIjKlMnOpQrStUvWxYz012345';
 
@@ -157,7 +157,7 @@ test('load: 빈 목록이면 폴더 접근 여부로 gone 과 빈 폴더를 구�
   const gone = await withFetch(handler(404), () => source().load());
   assert.equal(gone.status, 'gone');
   const empty = await withFetch(handler(200), () => source().load());
-  assert.deepEqual(empty, { status: 'ok', photos: [], audio: null });
+  assert.deepEqual(empty, { status: 'ok', photos: [], audio: null, background: null });
 });
 
 // ---- 배경음악은 사진과 완전히 별도인 폴더(bgmFolderId)에서 조회한다 ----
@@ -239,4 +239,18 @@ test('LP: 음악 폴더에서 음악과 이미지를 함께 조회하며 사진 
   }, () => source({ bgmFolderId: BGM_FOLDER }).load());
   assert.equal(result.audio.cover.id, 'cover');
   assert.deepEqual(result.photos.map((p) => p.id), ['photo']);
+});
+
+test('배경: background/배경 이름의 이미지는 화면 배경으로 쓰고 슬라이드에서 뺀다', () => {
+  const list = { files: [file('p1', '1.jpg'), file('bg', 'Background.PNG'), file('kr', '배경.jpg'), file('p2', 'background_01.jpg')] };
+  assert.deepEqual(toPhotos(list, cfg).map((p) => p.id), ['p1', 'p2']); // 이름이 정확히 일치할 때만 배경
+  assert.equal(findBackground({ files: [file('p1', '1.jpg'), file('bg', 'Background.PNG')] }, cfg).url, 'https://img.test/d/bg=s1920');
+  assert.equal(findBackground({ files: [file('b2', 'background.webp'), file('b1', 'background.jpg')] }, cfg).id, 'b1'); // 여러 개면 이름순 첫 번째
+  assert.equal(findBackground({ files: [file('p1', '1.jpg')] }, cfg), null);
+});
+
+test('load: 사진 폴더의 배경 이미지를 함께 돌려준다', async () => {
+  const r = await withFetch(async () => json({ files: [file('a', '1.jpg'), file('bg', '배경.webp')] }), () => source().load());
+  assert.deepEqual(r.photos.map((p) => p.id), ['a']);
+  assert.equal(r.background.id, 'bg');
 });

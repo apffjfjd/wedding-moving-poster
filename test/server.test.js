@@ -262,3 +262,23 @@ test('LP 이미지: 권한·트랙 검증, 업로드·교체·삭제 및 음악 
   await fetch(`${base}/api/slideshows/${id}/audio`, { method: 'DELETE', headers: { 'x-edit-key': editKey } });
   assert.equal((await fetch(`${base}${fourth.cover.url}`)).status, 404);
 });
+
+test('배경 이미지: 권한·형식 검증, 업로드·교체·삭제', async () => {
+  const { id, editKey } = await createShow();
+  const background = (method, body, key = editKey) => fetch(`${base}/api/slideshows/${id}/background`, {
+    method, headers: { 'x-edit-key': key }, body,
+  });
+  assert.equal((await (await fetch(`${base}/api/slideshows/${id}`)).json()).background, null);
+  assert.equal((await background('POST', JPEG, 'wrong')).status, 403);
+  assert.equal((await background('POST', MP3)).status, 415);
+  const first = (await (await background('POST', JPEG)).json()).background;
+  assert.equal((await fetch(`${base}${first.url}`)).headers.get('content-type'), 'image/jpeg');
+  const second = (await (await background('POST', PNG)).json()).background;
+  assert.notEqual(first.url, second.url);
+  assert.equal((await fetch(`${base}${first.url}`)).status, 404);
+  const meta = await (await fetch(`${base}/api/slideshows/${id}`)).json();
+  assert.equal(meta.photos.length, 0); // 배경은 슬라이드 사진 목록에 섞이지 않는다
+  assert.deepEqual(meta.background, second);
+  assert.equal((await (await background('DELETE')).json()).background, null);
+  assert.equal((await fetch(`${base}${second.url}`)).status, 404);
+});
