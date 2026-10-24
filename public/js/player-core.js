@@ -79,7 +79,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   frameSlot.className = 'photo-slot';
   // 액자: 그림자(뒤) > 사진(액자 윤곽으로 잘라냄) > 테두리 > 테두리를 따라 도는 빛(앞)
   const frameBox = document.createElement('div');
-  frameBox.className = lite ? 'photo-frame lite' : 'photo-frame';
+  frameBox.className = 'photo-frame';
   const svgLayer = (cls) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', cls);
@@ -122,10 +122,11 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     if (!w || !h) return;
     const u = Math.min(w, h);
     const s = (k, min = 0) => Math.max(min, k * u).toFixed(2);
-    const m = Math.max(6, 0.035 * u); // 바깥 테두리선 위치(발광·장식이 들어갈 여백)
+    const m = Math.max(6, 0.03 * u); // 테두리선 위치(번짐·반딧불이 들어갈 여백)
     const outline = framePath(w, h, m);
-    const innerLine = framePath(w, h, m + Math.max(4, 0.024 * u));
     frame.style.clipPath = `path('${outline}')`;
+    const motion = !lite && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const rand = seeded(7); // 크기가 바뀌어도 같은 무늬가 나오도록 고정 시드
 
     frameShadow.setAttribute('viewBox', `0 0 ${w} ${h}`);
     frameShadow.innerHTML = `
@@ -136,60 +137,119 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         </mask>
       </defs>
       <g mask="url(#wmp-frame-outside)">
-        <path d="${outline}" transform="translate(0 ${s(0.018)})" fill="#6b4226" fill-opacity="0.38" filter="url(#wmp-frame-shadow)"/>
+        <path d="${outline}" transform="translate(0 ${s(0.018)})" fill="#6b4226" fill-opacity="0.22" filter="url(#wmp-frame-shadow)"/>
       </g>`;
 
+    // 반딧불이 지나간 자리: 아주 가는 빛줄기가 군데군데 끊기고 밝기가 고르지 않으며, 살짝 일렁인다.
+    // 끊김 무늬가 다른 선 세 겹을 겹쳐 밝기 차이를 만들고, 난류 변위 필터로 선을 불규칙하게 흔든다.
+    const wobble = s(0.013, 3);
+    const trace = (dash, stroke, width, opacity, inset = m, filter = 'wmp-frame-wobble') => `
+      <path d="${framePath(w, h, inset)}" pathLength="1000" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-opacity="${opacity}"
+        stroke-linecap="round" stroke-dasharray="${dash}" filter="url(#${filter})"/>`;
+    // 가는 빛줄기 아래에 옅은 갈색 그늘선을 같은 무늬로 깔아, 흰 배경에서도 윤곽이 읽히게 한다.
+    const mainDash = dashes(rand, [30, 160], [2, 18]);
     frameBorder.setAttribute('viewBox', `0 0 ${w} ${h}`);
     frameBorder.innerHTML = `
       <defs>
-        <linearGradient id="wmp-frame-metal" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#fffaf3"/>
-          <stop offset="0.28" stop-color="#FDE3C7"/>
-          <stop offset="0.5" stop-color="#e6bb93"/>
-          <stop offset="0.72" stop-color="#FDE3C7"/>
-          <stop offset="1" stop-color="#fff4e6"/>
-        </linearGradient>
-        <filter id="wmp-frame-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${s(0.012, 2)}"/></filter>
+        <filter id="wmp-frame-wobble" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="${(0.9 / u).toFixed(4)} ${(1.3 / u).toFixed(4)}" numOctaves="2" seed="3"/>
+          <feDisplacementMap in="SourceGraphic" scale="${wobble}" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="wmp-frame-haze" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="${(0.9 / u).toFixed(4)} ${(1.3 / u).toFixed(4)}" numOctaves="2" seed="3"/>
+          <feDisplacementMap in="SourceGraphic" scale="${wobble}" xChannelSelector="R" yChannelSelector="G" result="moved"/>
+          <feGaussianBlur in="moved" stdDeviation="${s(0.006, 2)}"/>
+        </filter>
         <filter id="wmp-frame-inner" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${s(0.02, 3)}"/></filter>
         <clipPath id="wmp-frame-inside"><path d="${outline}"/></clipPath>
       </defs>
-      <path d="${outline}" fill="none" stroke="#8a5a34" stroke-opacity="0.22" stroke-width="${s(0.05)}" filter="url(#wmp-frame-inner)" clip-path="url(#wmp-frame-inside)"/>
-      <path d="${outline}" fill="none" stroke="#FDE3C7" stroke-opacity="0.85" stroke-width="${s(0.034, 4)}" filter="url(#wmp-frame-glow)"/>
-      <path d="${outline}" fill="none" stroke="#b9875c" stroke-opacity="0.55" stroke-width="${s(0.019, 3.5)}" stroke-linejoin="round"/>
-      <path d="${outline}" fill="none" stroke="url(#wmp-frame-metal)" stroke-width="${s(0.013, 2.5)}" stroke-linejoin="round"/>
-      <path d="${innerLine}" fill="none" stroke="#FDE3C7" stroke-opacity="0.8" stroke-width="${s(0.003, 1)}"/>
-      <g transform="translate(${(w / 2).toFixed(2)} ${m.toFixed(2)})" filter="url(#wmp-frame-glow)">
-        <path d="${sparkle(0.042 * u)}" fill="#fff6ea"/>
-      </g>
-      <path d="${sparkle(0.032 * u)}" transform="translate(${(w / 2).toFixed(2)} ${m.toFixed(2)})" fill="url(#wmp-frame-metal)" stroke="#fffaf3" stroke-width="0.8"/>`;
+      <path d="${outline}" fill="none" stroke="#FDE3C7" stroke-opacity="0.35" stroke-width="${s(0.04)}" filter="url(#wmp-frame-inner)" clip-path="url(#wmp-frame-inside)"/>
+      ${trace(dashes(rand, [40, 140], [10, 60]), '#FDE3C7', s(0.011, 3.5), 0.75, m, 'wmp-frame-haze')}
+      ${trace(mainDash, '#8a5a34', s(0.004, 1.6), 0.3, m, 'wmp-frame-haze')}
+      ${trace(mainDash, '#fff3e2', s(0.0022, 0.9), 1)}
+      ${trace(dashes(rand, [8, 60], [6, 40]), '#f5cfa6', s(0.0016, 0.7), 0.75, m + Math.max(1.5, 0.006 * u))}`;
 
-    // 빛 한 줄기가 테두리를 따라 돌며 잔상을 남긴다. 길이가 다른 대시를 앞끝에 맞춰 겹쳐 꼬리를 만든다.
+    // 반딧불: 테두리 주변에 흩어진 작은 빛 알갱이가 저마다 다른 박자로 깜빡인다.
+    const measure = frameBorder.querySelector('clipPath path'); // 액자 윤곽 그대로
+    const total = measure.getTotalLength();
+    const flies = [];
+    const count = Math.round(total / Math.max(28, 0.09 * u));
+    for (let k = 0; k < count; k++) {
+      const at = ((k + rand() * 0.8) / count) * total;
+      const p = measure.getPointAtLength(at);
+      const q = measure.getPointAtLength(Math.min(total, at + 1));
+      const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+      const off = (rand() - 0.5) * Math.max(6, 0.03 * u); // 선 양옆으로 조금씩 벗어나게
+      flies.push({
+        x: p.x - ((q.y - p.y) / len) * off,
+        y: p.y + ((q.x - p.x) / len) * off,
+        r: Math.max(2, 0.009 * u) * (0.5 + rand()),
+        dim: 0.2 + rand() * 0.25,
+        peak: 0.8 + rand() * 0.2,
+        period: 2200 + rand() * 4200,
+        phase: rand(),
+      });
+    }
+
+    // 테두리를 따라 도는 반딧불 한 마리. 길이가 다른 대시를 앞끝에 맞춰 겹쳐 가늘게 사라지는 꼬리를 만든다.
     // pathLength=1000으로 정규화하고, 각 대시를 (길이 - 머리 길이)만큼 뒤로 보정한 위치에서 한 바퀴씩 돌린다.
     const trail = [
-      { len: 320, width: s(0.016, 3), color: '#FDE3C7', opacity: 0.28 },
-      { len: 170, width: s(0.012, 2.5), color: '#ffeedd', opacity: 0.45 },
-      { len: 80, width: s(0.009, 2), color: '#fff6ec', opacity: 0.7 },
-      { len: 26, width: s(0.03, 5), color: '#FDE3C7', opacity: 0.35 },
-      { len: 18, width: s(0.007, 1.5), color: '#ffffff', opacity: 1 },
+      { len: 260, width: s(0.0025, 1), color: '#FDE3C7', opacity: 0.35 },
+      { len: 110, width: s(0.003, 1.2), color: '#fff1df', opacity: 0.6 },
+      { len: 30, width: s(0.004, 1.5), color: '#fff8ee', opacity: 0.9 },
+      { len: 3, width: s(0.022, 7), color: '#FDE3C7', opacity: 0.3 },
+      { len: 2, width: s(0.007, 2.5), color: '#ffffff', opacity: 1 },
     ];
     const head = trail[trail.length - 1].len;
     frameGleam.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    frameGleam.innerHTML = trail.map((t) => `
-      <path d="${outline}" pathLength="1000" fill="none" stroke="${t.color}" stroke-opacity="${t.opacity}" stroke-width="${t.width}"
-        stroke-linecap="round" stroke-dasharray="${t.len} ${1000 - t.len}"/>`).join('');
-    if (lite || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    [...frameGleam.children].forEach((path, i) => {
+    frameGleam.innerHTML = `
+      <defs>
+        <radialGradient id="wmp-firefly">
+          <stop offset="0" stop-color="#fffaf0"/>
+          <stop offset="0.12" stop-color="#ffd9ad"/>
+          <stop offset="0.4" stop-color="#f6c696" stop-opacity="0.55"/>
+          <stop offset="1" stop-color="#FDE3C7" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      ${flies.map((f) => `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(f.r * 3).toFixed(2)}" fill="url(#wmp-firefly)" opacity="${f.peak.toFixed(2)}"/>`).join('')}
+      ${motion ? trail.map((t) => `
+      <path class="gleam" d="${outline}" pathLength="1000" fill="none" stroke="${t.color}" stroke-opacity="${t.opacity}" stroke-width="${t.width}"
+        stroke-linecap="round" stroke-dasharray="${t.len} ${1000 - t.len}"/>`).join('') : ''}`;
+    if (!motion) return;
+    const now = performance.now();
+    frameGleam.querySelectorAll('circle').forEach((dot, k) => {
+      const f = flies[k];
+      const anim = dot.animate([{ opacity: f.dim }, { opacity: f.peak }, { opacity: f.dim }], { duration: f.period, iterations: Infinity, easing: 'ease-in-out' });
+      anim.currentTime = now + f.phase * f.period;
+    });
+    frameGleam.querySelectorAll('.gleam').forEach((path, i) => {
       const o = trail[i].len - head;
       const anim = path.animate([{ strokeDashoffset: o }, { strokeDashoffset: o - 1000 }], { duration: GLEAM_MS, iterations: Infinity });
-      anim.currentTime = performance.now() % GLEAM_MS; // 크기 변경으로 다시 그려도 빛의 위치가 이어지게 한다
+      anim.currentTime = now % GLEAM_MS; // 크기 변경으로 다시 그려도 빛의 위치가 이어지게 한다
     });
   }
 
-  /** 아치 꼭대기의 네 갈래 별 장식 */
-  function sparkle(r) {
-    const k = r * 0.22;
-    const f = (n) => n.toFixed(2);
-    return `M0,${f(-r)} Q${f(k)},${f(-k)} ${f(r)},0 Q${f(k)},${f(k)} 0,${f(r)} Q${f(-k)},${f(k)} ${f(-r)},0 Q${f(-k)},${f(-k)} 0,${f(-r)} Z`;
+  /** 고정 시드 난수(0~1). 테두리의 불규칙한 무늬가 매번 같게 나오게 한다. */
+  function seeded(seed) {
+    let t = seed;
+    return () => {
+      t = (t + 0x6d2b79f5) | 0;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** pathLength 1000 기준의 불규칙한 끊김 무늬(선 길이·틈 길이 범위 안에서 무작위) */
+  function dashes(rand, [dashMin, dashMax], [gapMin, gapMax]) {
+    const parts = [];
+    for (let sum = 0; sum < 1000; ) {
+      const dash = dashMin + rand() * (dashMax - dashMin);
+      const gap = gapMin + rand() * (gapMax - gapMin);
+      parts.push(dash.toFixed(1), gap.toFixed(1));
+      sum += dash + gap;
+    }
+    return parts.join(' ');
   }
 
   new ResizeObserver(sizePoster).observe(composition);
