@@ -118,7 +118,3 @@ input[type='range'] { accent-color: var(--accent); }
 .showlist li { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .showlist li:first-child { border-top: 0; }
 .showlist .grow { flex: 1; min-width: 160px; }
-
-.ratio-row input[type="number"] { flex: 0 1 72px; width: 72px; min-width: 48px; }
-
-.ratio-row label { width: auto; }

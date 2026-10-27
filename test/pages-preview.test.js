@@ -13,7 +13,6 @@ test('기본 미리보기는 드라이브 URL 생성 화면과 재생 진입점�
     const index = await (await fetch(`${base}/`)).text();
     assert.match(index, /id="folder"/);
     assert.match(index, /id="bgmFolder"/);
-    assert.match(index, /id="frameWidth"/);
     assert.doesNotMatch(index, /id="create"/);
     const player = await (await fetch(`${base}/player.html?folder=exampleFolder&bgm=musicFolder`)).text();
     assert.match(player, /\.\/js\/drive-player.js/);

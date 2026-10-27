@@ -50,16 +50,9 @@ function make() {
     }
   }
 
-  if (!['frameWidth', 'frameHeight'].every((id) => $(id).checkValidity() && $(id).value !== '')) {
-    err.textContent = '프레임의 가로와 세로 비율을 1~20 사이로 입력해 주세요.';
-    err.hidden = false;
-    $('result').hidden = true;
-    return;
-  }
   err.hidden = true;
   const url = new URL('./player.html', location.href);
   url.searchParams.set('folder', folderId);
-  for (const id of ['frameWidth', 'frameHeight']) url.searchParams.set(id, $(id).value);
   if (bgmFolderId) url.searchParams.set('bgm', bgmFolderId);
   const duration = Number($('duration').value);
   if (duration !== DEFAULT_HOLD_SECONDS) url.searchParams.set('duration', String(duration));
@@ -69,7 +62,7 @@ function make() {
 }
 
 $('make').addEventListener('click', make);
-for (const id of ['folder', 'bgmFolder', 'frameWidth', 'frameHeight']) {
+for (const id of ['folder', 'bgmFolder']) {
   $(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') make();
   });
