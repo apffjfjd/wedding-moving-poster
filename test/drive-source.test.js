@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFolderId, parsePhotoName, toPhotos, findAudio, createDriveSource } from '../public/js/drive-source.js';
+import { parseFolderId, parsePhotoName, toPhotos, findAudio, findTracks, createDriveSource } from '../public/js/drive-source.js';
 
 const FOLDER = '1AbCdEfGhIjKlMnOpQrStUvWxYz012345';
 
@@ -173,7 +173,7 @@ test('load: 사진 폴더와 배경음악 폴더를 각각 따로 조회한다',
     async (url) => {
       if (routeByFolder(url) === 'bgm') {
         assert.ok(new URL(url).searchParams.get('q').includes("mimeType contains 'audio/'"));
-        return json({ files: [audioFile('b', '2.mp3'), audioFile('a', '1.mp3')] }); // 이름순 뒤: b는 무시되어야 함
+        return json({ files: [audioFile('b', '2.mp3'), audioFile('a', '1.mp3')] }); // 이름순으로 재생 목록이 된다
       }
       return json({ files: [file('p', '1.jpg')] });
     },
@@ -181,7 +181,7 @@ test('load: 사진 폴더와 배경음악 폴더를 각각 따로 조회한다',
   );
   assert.equal(r.status, 'ok');
   assert.equal(r.photos.length, 1);
-  assert.equal(r.audio.id, 'a');
+  assert.deepEqual(r.audio.map((t) => t.id), ['a', 'b']);
 });
 
 test('load: 배경음악 폴더 조회가 네트워크 오류로 실패해도 사진 재생은 계속된다', async () => {
@@ -237,6 +237,14 @@ test('LP: 음악 폴더에서 음악과 이미지를 함께 조회하며 사진 
     }
     return json({ files: [file('photo', '1.jpg')] });
   }, () => source({ bgmFolderId: BGM_FOLDER }).load());
-  assert.equal(result.audio.cover.id, 'cover');
+  assert.equal(result.audio[0].cover.id, 'cover');
   assert.deepEqual(result.photos.map((p) => p.id), ['photo']);
+});
+
+test('재생 목록: 음악 폴더의 모든 곡을 이름순으로, 같은 이름 이미지를 각 곡의 CD 이미지로 붙인다', () => {
+  const tracks = findTracks({ files: [audioFile('b', '10_b.mp3'), file('bc', '10_b.jpg'), audioFile('a', '2_a.mp3'), audioFile('h', '.hidden.mp3')] }, cfg);
+  assert.deepEqual(tracks.map((t) => t.id), ['a', 'b']);
+  assert.equal(tracks[0].cover, undefined);
+  assert.equal(tracks[1].cover.id, 'bc');
+  assert.deepEqual(findTracks({ files: [file('p', '1.jpg')] }, cfg), []);
 });

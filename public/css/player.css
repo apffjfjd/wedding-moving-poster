@@ -108,12 +108,18 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   -webkit-user-drag: none;
 }
 
-/* CD 케이스: 불투명한 흰색 정사각형. 오른쪽 입구 노치 윤곽은 player-core.js가 clip-path로 잘라 낸다.
-   잘라 낸 요소에는 그림자가 남지 않으므로 바깥 래퍼에 drop-shadow를 준다. */
+/* CD 케이스: 뒷면(.cd-case-back) < CD(.turntable) < 앞면(.cd-case). 뒷면은 앞면보다 오른쪽으로 길게 나와 입구를 드러낸다.
+   앞면 노치 윤곽은 player-core.js가 clip-path로 잘라 낸다. 잘라 낸 요소에는 그림자가 남지 않으므로 바깥 래퍼에 drop-shadow를 준다. */
+.cd-case-back {
+  position: absolute;
+  z-index: 1;
+  background: linear-gradient(160deg, #f6f3ee, #e9e5df 60%, #e1ddd6);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.16), inset -1px 0 0 rgba(255, 255, 255, 0.7);
+}
 .cd-case-shadow {
   position: absolute;
-  z-index: 2;
-  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.32)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+  z-index: 3;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.28)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.18));
 }
 .cd-case {
   position: absolute;
@@ -124,17 +130,24 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   background: linear-gradient(118deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 22%, transparent 36%, transparent 70%, rgba(255, 255, 255, 0.06) 82%, transparent 92%);
   pointer-events: none;
 }
-/* 사진 창: 테두리(--edge) 안쪽의 정사각형. 사진이 빈틈 없이 채운다 */
+/* 사진 창: 좌우는 끝까지, 위아래만 여백(--margin). 사진이 빈틈 없이 채운다 */
 .frame-clip {
   position: absolute;
-  inset: var(--edge);
+  top: var(--margin); bottom: var(--margin); left: 0; right: 0;
   overflow: hidden;
   background: #ece8e2;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+/* 노치 둘레의 반원 테두리: 노치보다 조금 큰 원이 앞면 윤곽에 잘려 띠만 남는다 */
+.notch-rim {
+  position: absolute;
+  z-index: 1;
+  border-radius: 50%;
+  background: #f8f6f2;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 /* 슬라이드 하나: 래퍼(.photo-slide, opacity/filter 전환) > 원본(.fg) */
 .photo-slide { position: absolute; inset: 0; overflow: hidden; will-change: opacity; }
@@ -151,9 +164,9 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
 /* 사진은 창을 꽉 채운다(넘치는 가장자리는 잘림) */
 .photo-slide .fg { object-fit: cover; }
 
-/* CD: 케이스 뒤(z-index 1)에 놓이고 오른쪽 노치 사이로도 보인다. 판은 회전하고, 무지개 반사(::before)와 그림자(::after)는 제자리에 둔다.
+/* CD: 케이스 앞면과 뒷면 사이(z-index 2)에 놓이고 오른쪽 노치 사이로도 보인다. 회전·넣고 빼기는 player-core.js가 한다. 판은 회전하고, 무지개 반사(::before)와 그림자(::after)는 제자리에 둔다.
    인쇄면 디자인은 미정이라 은색 무지 디스크로 두고, 음악 이미지가 있으면 인쇄면(.record-label)에 채운다. */
-.turntable { position: absolute; z-index: 1; aspect-ratio: 1; }
+.turntable { position: absolute; z-index: 2; aspect-ratio: 1; }
 .turntable::before {
   content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
   background:
@@ -180,10 +193,7 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   /* 가운데 구멍은 뚫어서 뒤 배경이 보이게 한다 */
   -webkit-mask: radial-gradient(circle, transparent 6.5%, #000 6.7%);
   mask: radial-gradient(circle, transparent 6.5%, #000 6.7%);
-  animation: record-spin 2.4s linear infinite paused;
 }
-.turntable.playing .record { animation-play-state: running; }
-@keyframes record-spin { to { transform: rotate(360deg); } }
 .record-label {
   position: absolute;
   inset: 0;
@@ -195,6 +205,3 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   mask: radial-gradient(circle, transparent 16.6%, #000 17%);
 }
 .record-art { width: 100%; height: 100%; display: block; object-fit: cover; }
-@media (prefers-reduced-motion: reduce) {
-  .record { animation: none; }
-}
