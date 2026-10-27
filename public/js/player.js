@@ -17,12 +17,7 @@ const source = {
       if (res.status === 404) return { status: 'gone' };
       if (!res.ok) return { status: 'offline' };
       const meta = await res.json();
-      return {
-        status: 'ok',
-        photos: meta.photos,
-        audio: meta.audio ? { ...meta.audio, version: meta.audio.url } : null,
-        background: meta.background,
-      };
+      return { status: 'ok', photos: meta.photos, audio: meta.audio ? { ...meta.audio, version: meta.audio.url } : null };
     } catch {
       return { status: 'offline' }; // 현장 네트워크 불안정: 마지막으로 받은 목록으로 계속 재생한다.
     }

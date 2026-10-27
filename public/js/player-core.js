@@ -7,10 +7,9 @@
 //   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
 //   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
-//   background  photo | null  — 화면 배경 이미지. 없으면 흰 배경.
 import { resolveEffect, transitionFor } from './effects.js';
 
-import { frameRatio, framePath } from './poster.js';
+import { frameRatio } from './poster.js';
 
 import { holdMsFromSeconds } from './timing.js';
 
@@ -72,152 +71,56 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
   const lite = params.get('lite') === '1';
   const ratio = frameRatio(params.get('frameWidth'), params.get('frameHeight'));
+  // 포스터 구성: [CD 케이스(사진) + 케이스 뒤로 반쯤 가려진 CD] 위, 하단 문구 이미지 아래.
+  // 화면 배경(#stage)에는 케이스에 나오는 사진을 흐리게 깔아 함께 바꾼다.
   const composition = document.createElement('div');
   composition.className = 'poster-composition';
-  const frameSlot = document.createElement('div');
-  frameSlot.className = 'photo-slot';
-  // 액자: 그림자(뒤) > 사진(액자 윤곽으로 잘라냄) > 테두리(앞)
-  const frameBox = document.createElement('div');
-  frameBox.className = 'photo-frame';
-  const svgLayer = (cls) => {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', cls);
-    svg.setAttribute('aria-hidden', 'true');
-    return svg;
-  };
-  const frameShadow = svgLayer('frame-shadow');
-  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 곳
+  const showcase = document.createElement('div');
+  showcase.className = 'showcase';
+  const cdCase = document.createElement('div');
+  cdCase.className = 'cd-case';
+  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 케이스 안쪽 창
   frame.className = 'frame-clip';
-  const frameBorder = svgLayer('frame-border');
-  frameBox.append(frameShadow, frame, frameBorder);
-  frameSlot.append(frameBox);
-  const recordSlot = document.createElement('div');
-  recordSlot.className = 'record-slot';
-  // LP(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다.
+  cdCase.append(frame);
+  // CD(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다. 인쇄면 디자인은 미정(음악 이미지가 있으면 그것을 쓴다).
   const turntable = document.createElement('div');
   turntable.className = 'turntable';
   const record = document.createElement('div');
   record.className = 'record';
   record.setAttribute('role', 'img');
-  record.setAttribute('aria-label', '배경음악 LP');
+  record.setAttribute('aria-label', '배경음악 CD');
   const label = document.createElement('div');
   label.className = 'record-label';
   record.append(label);
   turntable.append(record);
-  recordSlot.append(turntable);
-  composition.append(frameSlot, recordSlot);
+  showcase.append(turntable, cdCase);
+  const caption = makeImg(new URL('../img/caption.png', import.meta.url).href, 'caption');
+  caption.alt = 'KYUDONG & SEOYOON, 2026. 10. 31 | 2:00 PM';
+  composition.append(showcase, caption);
   stage.after(composition);
+
+  const DISC = 0.9; // CD 지름 / 케이스 높이
+  const DISC_OUT = 0.62; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
   function sizePoster() {
-    const width = Math.min(frameSlot.clientWidth, frameSlot.clientHeight * ratio.width / ratio.height) * 0.85;
-    const height = width * ratio.height / ratio.width;
-    frameBox.style.width = `${width}px`;
-    frameBox.style.height = `${height}px`;
-    drawFrame(width, height);
-    turntable.style.width = `${Math.min(recordSlot.clientWidth, recordSlot.clientHeight) * 0.82}px`;
-  }
-  /** 액자 크기가 바뀔 때마다 윤곽·테두리를 다시 그린다. 기본색 #FDE3C7(샴페인 피치) 계열. */
-  function drawFrame(w, h) {
-    if (!w || !h) return;
-    const u = Math.min(w, h);
-    const s = (k, min = 0) => Math.max(min, k * u).toFixed(2);
-    const m = Math.max(6, 0.03 * u); // 테두리선 위치(번짐·반딧불이 들어갈 여백)
-    const outline = framePath(w, h, m);
-    frame.style.clipPath = `path('${outline}')`;
-    const rand = seeded(7); // 크기가 바뀌어도 같은 무늬가 나오도록 고정 시드
-
-    frameShadow.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    frameShadow.innerHTML = `
-      <defs>
-        <filter id="wmp-frame-shadow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${s(0.025)}"/></filter>
-        <mask id="wmp-frame-outside" maskUnits="userSpaceOnUse" x="${-w}" y="${-h}" width="${w * 3}" height="${h * 3}">
-          <rect x="${-w}" y="${-h}" width="${w * 3}" height="${h * 3}" fill="#fff"/><path d="${outline}" fill="#000"/>
-        </mask>
-      </defs>
-      <g mask="url(#wmp-frame-outside)">
-        <path d="${outline}" transform="translate(0 ${s(0.018)})" fill="#6b4226" fill-opacity="0.22" filter="url(#wmp-frame-shadow)"/>
-      </g>`;
-
-    // 반딧불이 지나간 자리: 아주 가는 빛줄기가 군데군데 끊기고 밝기가 고르지 않으며, 살짝 일렁인다.
-    // 끊김 무늬가 다른 선 세 겹을 겹쳐 밝기 차이를 만들고, 난류 변위 필터로 선을 불규칙하게 흔든다.
-    const wobble = s(0.013, 3);
-    const trace = (dash, stroke, width, opacity, inset = m, filter = 'wmp-frame-wobble') => `
-      <path d="${framePath(w, h, inset)}" pathLength="1000" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-opacity="${opacity}"
-        stroke-linecap="round" stroke-dasharray="${dash}" filter="url(#${filter})"/>`;
-    // 가는 빛줄기 아래에 옅은 갈색 그늘선을 같은 무늬로 깔아, 흰 배경에서도 윤곽이 읽히게 한다.
-    const mainDash = dashes(rand, [30, 160], [2, 18]);
-    frameBorder.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    frameBorder.innerHTML = `
-      <defs>
-        <filter id="wmp-frame-wobble" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence type="fractalNoise" baseFrequency="${(0.9 / u).toFixed(4)} ${(1.3 / u).toFixed(4)}" numOctaves="2" seed="3"/>
-          <feDisplacementMap in="SourceGraphic" scale="${wobble}" xChannelSelector="R" yChannelSelector="G"/>
-        </filter>
-        <filter id="wmp-frame-haze" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence type="fractalNoise" baseFrequency="${(0.9 / u).toFixed(4)} ${(1.3 / u).toFixed(4)}" numOctaves="2" seed="3"/>
-          <feDisplacementMap in="SourceGraphic" scale="${wobble}" xChannelSelector="R" yChannelSelector="G" result="moved"/>
-          <feGaussianBlur in="moved" stdDeviation="${s(0.006, 2)}"/>
-        </filter>
-        <filter id="wmp-frame-inner" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="${s(0.02, 3)}"/></filter>
-        <clipPath id="wmp-frame-inside"><path d="${outline}"/></clipPath>
-      </defs>
-      <path d="${outline}" fill="none" stroke="#FDE3C7" stroke-opacity="0.35" stroke-width="${s(0.04)}" filter="url(#wmp-frame-inner)" clip-path="url(#wmp-frame-inside)"/>
-      ${trace(dashes(rand, [40, 140], [10, 60]), '#FDE3C7', s(0.011, 3.5), 0.75, m, 'wmp-frame-haze')}
-      ${trace(mainDash, '#8a5a34', s(0.004, 1.6), 0.3, m, 'wmp-frame-haze')}
-      ${trace(mainDash, '#fff3e2', s(0.0022, 0.9), 1)}
-      ${trace(dashes(rand, [8, 60], [6, 40]), '#f5cfa6', s(0.0016, 0.7), 0.75, m + Math.max(1.5, 0.006 * u))}`;
-
-    // 반딧불: 테두리 주변에 크기·밝기가 제각각인 작은 빛 알갱이를 흩어 둔다(움직이지 않음).
-    const measure = frameBorder.querySelector('clipPath path'); // 액자 윤곽 그대로
-    const total = measure.getTotalLength();
-    const flies = [];
-    const count = Math.round(total / Math.max(28, 0.09 * u));
-    for (let k = 0; k < count; k++) {
-      const at = ((k + rand() * 0.8) / count) * total;
-      const p = measure.getPointAtLength(at);
-      const q = measure.getPointAtLength(Math.min(total, at + 1));
-      const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
-      const off = (rand() - 0.5) * Math.max(6, 0.03 * u); // 선 양옆으로 조금씩 벗어나게
-      flies.push({
-        x: p.x - ((q.y - p.y) / len) * off,
-        y: p.y + ((q.x - p.x) / len) * off,
-        r: Math.max(2, 0.009 * u) * (0.5 + rand()),
-        opacity: 0.45 + rand() * 0.55,
-      });
-    }
-
-    frameBorder.insertAdjacentHTML('beforeend', `
-      <defs>
-        <radialGradient id="wmp-firefly">
-          <stop offset="0" stop-color="#fffaf0"/>
-          <stop offset="0.12" stop-color="#ffd9ad"/>
-          <stop offset="0.4" stop-color="#f6c696" stop-opacity="0.55"/>
-          <stop offset="1" stop-color="#FDE3C7" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      ${flies.map((f) => `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(f.r * 3).toFixed(2)}" fill="url(#wmp-firefly)" opacity="${f.opacity.toFixed(2)}"/>`).join('')}`);
-  }
-
-  /** 고정 시드 난수(0~1). 테두리의 불규칙한 무늬가 매번 같게 나오게 한다. */
-  function seeded(seed) {
-    let t = seed;
-    return () => {
-      t = (t + 0x6d2b79f5) | 0;
-      let r = Math.imul(t ^ (t >>> 15), 1 | t);
-      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  /** pathLength 1000 기준의 불규칙한 끊김 무늬(선 길이·틈 길이 범위 안에서 무작위) */
-  function dashes(rand, [dashMin, dashMax], [gapMin, gapMax]) {
-    const parts = [];
-    for (let sum = 0; sum < 1000; ) {
-      const dash = dashMin + rand() * (dashMax - dashMin);
-      const gap = gapMin + rand() * (gapMax - gapMin);
-      parts.push(dash.toFixed(1), gap.toFixed(1));
-      sum += dash + gap;
-    }
-    return parts.join(' ');
+    const room = { w: showcase.clientWidth, h: showcase.clientHeight };
+    if (!room.w || !room.h) return;
+    // 케이스 = 사진 창(사용자 비율) + 플라스틱 테두리. 왼쪽은 경첩만큼 더 두껍다.
+    const edge = (h) => Math.max(5, 0.035 * h);
+    const hinge = (h) => edge(h) * 2.4;
+    const caseWidthFor = (h) => (h - 2 * edge(h)) * ratio.width / ratio.height + edge(h) + hinge(h);
+    // 높이 h일 때 전체 폭 = 케이스 폭 + CD가 밖으로 나온 만큼. 둘 다 h에 비례하므로 한 번에 맞춘다.
+    const widthPerHeight = caseWidthFor(100) / 100 + DISC * DISC_OUT;
+    const h = Math.min(room.h, room.w / widthPerHeight);
+    const w = caseWidthFor(h);
+    const d = DISC * h;
+    const left = (room.w - (w + d * DISC_OUT)) / 2;
+    const top = (room.h - h) / 2;
+    Object.assign(cdCase.style, { width: `${w}px`, height: `${h}px`, left: `${left}px`, top: `${top}px` });
+    cdCase.style.setProperty('--edge', `${edge(h)}px`);
+    cdCase.style.setProperty('--hinge', `${hinge(h)}px`);
+    Object.assign(turntable.style, { width: `${d}px`, left: `${left + w + d * DISC_OUT - d}px`, top: `${top + (h - d) / 2}px` });
+    // 케이스 안 여백은 반투명이라 뒤에 놓인 CD가 비쳐 보인다. 케이스에 가려지는 부분은 잘라 내 흐린 배경만 보이게 한다.
+    turntable.style.clipPath = `inset(-20% -20% -20% ${d * (1 - DISC_OUT)}px)`;
   }
 
   new ResizeObserver(sizePoster).observe(composition);
@@ -247,32 +150,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       if (loadedCover.url.startsWith('blob:')) coverBlob = loadedCover.url;
       label.append(makeImg(loadedCover.url, 'record-art'));
     } else coverKey = null; // 다음 갱신에서 재시도
-  }
-  // 화면 배경은 stage에 한 장만 깐다. 없으면 stage의 흰 배경이 그대로 보인다.
-  let backgroundKey = null;
-  let backgroundSequence = 0;
-  let backgroundBlob = null;
-  async function syncBackground(background) {
-    const key = background ? `${background.url}:${background.version || ''}` : null;
-    if (key === backgroundKey) return;
-    backgroundKey = key;
-    const token = ++backgroundSequence;
-    let loadedBackground = null;
-    for (const url of background ? [background.url, ...(background.fallbacks || [])] : []) {
-      loadedBackground = await tryLoad(url, background.viaFetch);
-      if (loadedBackground) break;
-    }
-    if (token !== backgroundSequence) {
-      if (loadedBackground?.url.startsWith('blob:')) URL.revokeObjectURL(loadedBackground.url);
-      return;
-    }
-    if (background && !loadedBackground) {
-      backgroundKey = null; // 다음 갱신에서 재시도(그동안 이전 배경 유지)
-      return;
-    }
-    stage.replaceChildren(...(loadedBackground ? [makeImg(loadedBackground.url, 'backdrop')] : []));
-    if (backgroundBlob) URL.revokeObjectURL(backgroundBlob);
-    backgroundBlob = loadedBackground?.url.startsWith('blob:') ? loadedBackground.url : null;
   }
   const embedded = window.self !== window.top; // 편집 화면 미리보기 iframe 여부
 
@@ -396,7 +273,6 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         wakeFromEmpty?.();
         warmUp();
       }
-      syncBackground(result.background || null);
       syncCover(result.audio?.cover || null);
       syncAudio(result.audio || null);
     }
@@ -454,9 +330,15 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
 
   /** 사진 하나를 화면에 올리고 등장 전환을 시작한다. */
   function present(photo, index) {
-    // 원본은 프레임 안에 잘림 없이 고정한다. 프레임 비율과 달라 남는 여백은 비워 두어
-    // .frame-clip의 반투명 바탕 너머로 화면 배경이 비쳐 보이게 한다.
+    // 원본은 케이스 안에 잘림 없이 고정한다. 케이스 비율과 달라 남는 여백은 비워 두어
+    // .frame-clip의 반투명 바탕 너머로 화면 배경(같은 사진의 블러)이 비쳐 보이게 한다.
     const effect = resolveEffect(photo, index, { lite });
+
+    // 화면 배경: 같은 사진을 흐리게 확대해 깔고, 새 배경이 이전 배경 위로 서서히 나타난다.
+    const backdrop = makeImg(photo.url, 'backdrop');
+    const previousBackdrops = [...stage.children];
+    stage.append(backdrop);
+    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: TRANS_MS, easing: 'ease-in-out', fill: 'both' });
 
     const photoSlide = document.createElement('div');
     photoSlide.className = 'photo-slide';
@@ -480,8 +362,8 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fadeOutMs, easing: 'ease-in', fill: 'forwards' }),
     );
 
-    // 전환이 끝나 새 사진이 프레임을 완전히 덮으면 이전 슬라이드를 제거해 메모리를 회수한다.
-    return sleep(TRANS_MS).then(() => previous.forEach((el) => el.remove()));
+    // 전환이 끝나면 이전 사진·배경을 제거해 메모리를 회수한다.
+    return sleep(TRANS_MS).then(() => [...previous, ...previousBackdrops].forEach((el) => el.remove()));
   }
 
   /** 다음에 보여 줄 사진의 인덱스. 재생 중 사진이 추가/삭제돼도 흐름이 자연스럽게 이어지게 한다. */
@@ -507,6 +389,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     for (;;) {
       if (!photos.length) {
         frame.replaceChildren();
+        stage.replaceChildren();
         lastId = null;
         lastIndex = -1;
         showMessage(source.messages.empty);

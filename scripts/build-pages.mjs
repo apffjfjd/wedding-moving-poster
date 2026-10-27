@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
 
-const SHARED = ['js/poster.js', 'js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/timing.js', 'css/player.css', 'css/site.css'];
+const SHARED = ['js/poster.js', 'js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/timing.js', 'css/player.css', 'css/site.css', 'img/caption.png'];
 
 await fs.rm(DIST, { recursive: true, force: true });
 await fs.cp(path.join(ROOT, 'pages'), DIST, { recursive: true });
