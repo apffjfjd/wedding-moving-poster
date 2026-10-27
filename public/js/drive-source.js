@@ -71,25 +71,30 @@ export function toPhotos(list, config) {
 }
 
 /**
- * 폴더 안 오디오 파일 중 이름순 첫 번째를 배경음악으로 쓴다(여러 개면 나머지는 무시).
+ * 폴더 안 오디오 파일을 이름순 재생 목록으로 만든다. 같은 이름의 이미지가 있으면 그 곡의 CD 이미지로 붙인다.
  * 오디오는 lh3 리사이즈 URL 같은 게 없으므로 Drive API 원본 다운로드만 쓴다.
  */
-export function findAudio(list, config) {
+export function findTracks(list, config) {
   const { apiBase, apiKey } = config;
-  const file = (list.files || [])
-    .filter((f) => f.mimeType?.startsWith('audio/') && !f.name.startsWith('.'))
-    .sort(byName)[0];
-  if (!file) return null;
-  const artwork = (list.files || []).filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.'))
-    .sort(byName).find((f) => stem(f.name) === stem(file.name));
-  const cover = artwork ? toPhoto(artwork, config) : null;
-  return {
-    ...(cover ? { cover } : {}),
-    id: file.id,
-    url: `${apiBase}/files/${file.id}?alt=media&key=${encodeURIComponent(apiKey)}`,
-    viaFetch: true,
-    version: file.modifiedTime,
-  };
+  const files = (list.files || []).filter((f) => !f.name.startsWith('.')).sort(byName);
+  const images = files.filter((f) => f.mimeType?.startsWith('image/'));
+  return files
+    .filter((f) => f.mimeType?.startsWith('audio/'))
+    .map((file) => {
+      const artwork = images.find((f) => stem(f.name) === stem(file.name));
+      return {
+        ...(artwork ? { cover: toPhoto(artwork, config) } : {}),
+        id: file.id,
+        url: `${apiBase}/files/${file.id}?alt=media&key=${encodeURIComponent(apiKey)}`,
+        viaFetch: true,
+        version: file.modifiedTime,
+      };
+    });
+}
+
+/** 재생 목록의 첫 곡. 없으면 null. */
+export function findAudio(list, config) {
+  return findTracks(list, config)[0] || null;
 }
 
 /**
@@ -150,7 +155,8 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
       if (bgmFolderId) {
         try {
           const audioRes = await listFiles(bgmFolderId, 'audio/');
-          if (audioRes.ok) audio = findAudio(await audioRes.json(), { apiBase, apiKey, imageBase });
+          const tracks = audioRes.ok ? findTracks(await audioRes.json(), { apiBase, apiKey, imageBase }) : [];
+          if (tracks.length) audio = tracks; // 곡이 끝날 때마다 다음 곡으로(마지막 다음은 처음)
         } catch {
           /* 음악 폴더는 선택 사항이므로, 못 불러와도 사진 재생을 막지 않는다 */
         }

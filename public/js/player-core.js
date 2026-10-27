@@ -6,12 +6,19 @@
 //   messages  { empty, gone, offline, error } 상태별 안내 문구
 //   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
 //   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
-//   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
+//   audio     track | track[] | null  — 배경음악. track = { url, version?, viaFetch?, cover?: photo }
+//             목록이면 차례로, 한 곡이면 반복 재생하며 곡이 넘어갈 때마다 CD 교체 연출을 거친다.
 import { resolveEffect, transitionFor } from './effects.js';
 
 import { holdMsFromSeconds } from './timing.js';
 
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
+// 배경음악이 넘어갈 때의 CD 연출: 서서히 멈춤 → 케이스 안으로 → 잠시 쉼(다음 곡 준비) → 새 CD가 나옴 → 돌면서 재생
+const SPIN_MS = 2400; // CD 한 바퀴
+const SPIN_UP_MS = 700;
+const STOP_MS = 900;
+const SLIDE_MS = 1300;
+const PAUSE_MS = 600;
 const EMPTY_POLL_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,20 +75,25 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const params = new URLSearchParams(location.search);
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
   const lite = params.get('lite') === '1';
-  // 포스터 구성: [CD 케이스(사진) + 케이스 뒤로 반쯤 가려진 CD] 위, 하단 문구 이미지 아래.
+  // 포스터 구성: [CD 케이스 뒷면 < CD < 앞면(사진)] 위, 하단 문구 이미지 아래.
+  // 뒷면은 앞면보다 오른쪽으로 길게 빠져나와 케이스 입구를 드러내고, CD는 그 사이에서 나온다.
   // 화면 배경(#stage)에는 케이스에 나오는 사진을 흐리게 깔아 함께 바꾼다.
   const composition = document.createElement('div');
   composition.className = 'poster-composition';
   const showcase = document.createElement('div');
   showcase.className = 'showcase';
   // 흰색 불투명 케이스. 노치 모양으로 잘라 내면(clip-path) 그림자도 잘리므로, 그림자는 바깥 래퍼(filter)에 준다.
+  const caseBack = document.createElement('div');
+  caseBack.className = 'cd-case-back';
   const caseShadow = document.createElement('div');
   caseShadow.className = 'cd-case-shadow';
   const cdCase = document.createElement('div');
   cdCase.className = 'cd-case';
-  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 케이스 안쪽 정사각형 창
+  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 창(좌우 끝까지, 위아래 여백)
   frame.className = 'frame-clip';
-  cdCase.append(frame);
+  const notchRim = document.createElement('div'); // 노치 둘레의 반원 테두리
+  notchRim.className = 'notch-rim';
+  cdCase.append(frame, notchRim);
   caseShadow.append(cdCase);
   // CD(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다. 인쇄면 디자인은 미정(음악 이미지가 있으면 그것을 쓴다).
   const turntable = document.createElement('div');
@@ -94,33 +106,39 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   label.className = 'record-label';
   record.append(label);
   turntable.append(record);
-  showcase.append(turntable, caseShadow);
+  showcase.append(caseBack, turntable, caseShadow);
   const caption = makeImg(new URL('../img/caption.png', import.meta.url).href, 'caption');
   caption.alt = 'KYUDONG & SEOYOON, 2026. 10. 31 | 2:00 PM';
   composition.append(showcase, caption);
   stage.after(composition);
 
-  const DISC = 0.9; // CD 지름 / 케이스 한 변
+  const DISC = 0.9; // CD 지름 / 케이스 앞면 한 변
   const DISC_OUT = 0.62; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
+  const BACK_OUT = 0.1; // 뒷면이 앞면보다 오른쪽으로 더 나오는 길이 / 앞면 한 변
+  // CD를 케이스 안(앞면 가운데)으로 넣을 때의 이동량. CD 지름 기준 %라 화면 크기가 바뀌어도 맞는다.
+  const DISC_IN = `translateX(${(-(0.5 / DISC + DISC_OUT - 0.5) * 100).toFixed(2)}%)`;
   function sizePoster() {
     const room = { w: showcase.clientWidth, h: showcase.clientHeight };
     if (!room.w || !room.h) return;
-    // 케이스는 정사각형이고 사진 창도 정사각형이다(테두리 두께는 사방 같음).
+    // 앞면은 1:1. 사진은 좌우 끝까지 채우고 위아래에만 여백을 둔다.
     const size = Math.min(room.h, room.w / (1 + DISC * DISC_OUT));
     const d = DISC * size;
     const left = (room.w - (size + d * DISC_OUT)) / 2;
     const top = (room.h - size) / 2;
+    const corner = Math.max(3, 0.012 * size);
+    const notch = 0.075 * size;
+    const rim = Math.max(4, 0.022 * size);
     Object.assign(caseShadow.style, { width: `${size}px`, height: `${size}px`, left: `${left}px`, top: `${top}px` });
-    const edge = Math.max(6, 0.045 * size);
-    cdCase.style.setProperty('--edge', `${edge}px`);
-    cdCase.style.clipPath = `path('${casePath(size, edge * 0.85)}')`;
+    Object.assign(caseBack.style, { width: `${size * (1 + BACK_OUT)}px`, height: `${size}px`, left: `${left}px`, top: `${top}px`, borderRadius: `${corner}px` });
+    cdCase.style.setProperty('--margin', `${0.1 * size}px`);
+    cdCase.style.clipPath = `path('${casePath(size, notch, corner)}')`;
+    const ring = notch + rim; // 노치보다 rim만큼 큰 원을 오른쪽 가장자리 가운데에 두면, 잘린 노치 둘레만 반원 띠로 남는다
+    Object.assign(notchRim.style, { width: `${ring * 2}px`, height: `${ring * 2}px`, left: `${size - ring}px`, top: `${size / 2 - ring}px` });
     Object.assign(turntable.style, { width: `${d}px`, left: `${left + size + d * DISC_OUT - d}px`, top: `${top + (size - d) / 2}px` });
   }
 
-  /** 케이스 윤곽: 모서리를 살짝 둥글린 정사각형에, CD가 나오는 오른쪽 입구 가운데를 반원으로 파낸다.
-   *  노치는 흰 테두리 안에서 끝나게 해(r < 테두리 두께) 사진 창은 항상 온전한 정사각형으로 둔다. */
-  function casePath(size, r) {
-    const c = Math.max(3, 0.012 * size); // 모서리 반지름
+  /** 케이스 앞면 윤곽: 모서리(c)를 살짝 둥글린 정사각형에, CD가 나오는 오른쪽 입구 가운데를 반지름 r의 반원으로 파낸다. */
+  function casePath(size, r, c) {
     const mid = size / 2;
     const f = (n) => n.toFixed(2);
     return [
@@ -167,10 +185,9 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   let lastIndex = -1;
   let wakeFromEmpty = null; // 사진이 없어 대기 중일 때, 사진이 생기면 즉시 깨우는 콜백
 
-  // ---- 배경음악 (반복 재생 1곡) ----
+  // ---- 배경음악 ----
   // 브라우저 자동재생 정책상 사용자 입력(클릭/F 키) 전에는 소리가 나지 않을 수 있다.
   let audioEl = null;
-  let audioKey = null; // 트랙 동일 여부 비교용(url:version)
   let muted = safeStorage.get('wmp:muted') === '1';
   // 편집기 미리보기(iframe)에는 버튼을 두지 않는다. 여러 미리보기가 동시에 소리를 낼 수 있어
   // 거기서는 음악을 자동재생하지 않는다(사용자 입력이 없어 브라우저가 어차피 막는다).
@@ -202,59 +219,146 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     updateMuteBtn();
   }
 
-  function setSpinning(value) {
-    turntable.classList.toggle('playing', value);
+  // CD 회전: 무한 회전 애니메이션의 속도를 서서히 바꿔 부드럽게 멈추고 돈다(동작 줄이기 설정이면 돌지 않음).
+  const spin = matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? null
+    : record.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: SPIN_MS, iterations: Infinity });
+  spin?.pause();
+  let spinToken = 0;
+  function spinTo(target, ms) {
+    if (!spin) return Promise.resolve();
+    const token = ++spinToken;
+    const from = spin.playState === 'running' ? spin.playbackRate : 0;
+    if (target > 0 && spin.playState !== 'running') {
+      spin.playbackRate = 0.001;
+      spin.play();
+    }
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        if (token !== spinToken) return resolve();
+        const k = ms > 0 ? Math.min(1, (now - t0) / ms) : 1;
+        const rate = from + (target - from) * k * k * (3 - 2 * k);
+        if (k === 1 && target === 0) spin.pause();
+        else spin.playbackRate = Math.max(rate, 0.001);
+        if (k < 1) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  /** CD를 케이스 안으로 넣거나(true) 밖으로 꺼낸다(false). */
+  function slideDisc(inside) {
+    const frames = inside ? [{ transform: 'none' }, { transform: DISC_IN }] : [{ transform: DISC_IN }, { transform: 'none' }];
+    turntable.getAnimations().forEach((anim) => anim.cancel()); // 이전 이동은 끝난 상태(fill)이므로 지워도 이어진다
+    return turntable.animate(frames, { duration: SLIDE_MS, easing: 'cubic-bezier(0.55, 0, 0.25, 1)', fill: 'forwards' }).finished.catch(() => {});
   }
 
   function attemptPlay() {
+    if (changing) return; // CD 교체 중에는 새 CD가 나온 뒤에 재생한다
     audioEl?.play().catch(() => {
       /* 자동재생 차단: 클릭이나 F 키를 받으면 다시 시도한다 */
     });
   }
 
-  /** 배경음악 트랙을 목록에 맞춰 바꾼다. audio가 null이면 정지·제거한다. */
-  async function syncAudio(audio) {
-    const key = audio ? `${audio.url}:${audio.version || ''}` : null;
-    if (key === audioKey) return;
-    audioKey = key;
-    if (audioEl) {
-      audioEl.pause();
-      if (audioEl.src.startsWith('blob:')) URL.revokeObjectURL(audioEl.src);
-      audioEl.remove();
-      audioEl = null;
-      setSpinning(false);
-    }
-    if (!audio) {
-      updateMuteBtn();
-      return updateHint();
-    }
+  // ---- 재생 목록: 곡이 끝나면 CD 교체 연출을 거쳐 다음 곡(마지막 다음은 처음)을 재생한다 ----
+  let tracks = [];
+  let tracksKey = null;
+  let trackIndex = 0;
+  let audioTrackKey = null; // 지금 audioEl에 걸린 곡(url:version)
+  let changing = false; // CD 교체 연출 중
+  let trackSequence = 0; // 목록이 바뀌면 진행 중인 연출을 무효로 한다
+  const trackKeyOf = (track) => `${track.url}:${track.version || ''}`;
 
-    let src = audio.url;
-    if (audio.viaFetch) {
+  async function makeAudio(track) {
+    let src = track.url;
+    if (track.viaFetch) {
       try {
-        const res = await fetch(audio.url, { mode: 'cors' });
-        if (!res.ok) return updateMuteBtn();
+        const res = await fetch(track.url, { mode: 'cors' });
+        if (!res.ok) return null;
         src = URL.createObjectURL(await res.blob());
       } catch {
-        return updateMuteBtn(); // 못 불러오면 조용히 포기(음악 없이 재생은 계속된다)
+        return null; // 못 불러오면 조용히 포기(음악 없이 재생은 계속된다)
       }
     }
-    if (key !== audioKey) return; // 받는 동안 목록이 또 바뀜: 최신 것만 반영
-    audioEl = document.createElement('audio');
-    audioEl.loop = true;
-    audioEl.muted = muted;
-    audioEl.src = src;
-    audioEl.style.display = 'none';
-    const el = audioEl;
-    el.addEventListener('playing', () => el === audioEl && setSpinning(true));
-    for (const type of ['pause', 'ended', 'emptied']) {
-      el.addEventListener(type, () => el === audioEl && setSpinning(false));
-    }
-    // 미리보기 iframe은 소리를 내지 않으므로, 음악이 등록돼 있으면 재생 중인 모습으로 보여 준다.
-    if (embedded) setSpinning(true);
-    document.body.append(audioEl);
+    const el = document.createElement('audio');
+    el.muted = muted;
+    el.src = src;
+    el.style.display = 'none';
+    el.addEventListener('playing', () => el === audioEl && !changing && spinTo(1, SPIN_UP_MS));
+    el.addEventListener('pause', () => el === audioEl && !el.ended && spinTo(0, STOP_MS));
+    el.addEventListener('ended', () => el === audioEl && nextTrack());
+    document.body.append(el);
+    return el;
+  }
+
+  function useAudio(el, track) {
+    if (el !== audioEl) dropAudio();
+    audioEl = el;
+    audioTrackKey = el ? trackKeyOf(track) : null;
     updateMuteBtn();
     updateHint();
+    // 미리보기 iframe은 소리를 내지 않으므로, 음악이 등록돼 있으면 돌고 있는 모습으로 보여 준다.
+    if (embedded && el) spinTo(1, 0);
+  }
+
+  function dropAudio() {
+    if (!audioEl) return;
+    audioEl.pause();
+    if (audioEl.src.startsWith('blob:')) URL.revokeObjectURL(audioEl.src);
+    audioEl.remove();
+    audioEl = null;
+    audioTrackKey = null;
+  }
+
+  async function nextTrack() {
+    if (changing || !tracks.length) return;
+    changing = true;
+    const token = ++trackSequence;
+    await spinTo(0, STOP_MS);
+    await slideDisc(true);
+    if (token !== trackSequence) return;
+    trackIndex = (trackIndex + 1) % tracks.length;
+    const track = tracks[trackIndex];
+    syncCover(track.cover || null); // CD가 케이스 안에 있는 동안 인쇄면을 다음 곡 이미지로 바꾼다
+    const same = trackKeyOf(track) === audioTrackKey;
+    const [el] = await Promise.all([same ? audioEl : makeAudio(track), sleep(PAUSE_MS)]);
+    if (token !== trackSequence) {
+      if (el && el !== audioEl) el.remove();
+      return;
+    }
+    if (same && el) el.currentTime = 0;
+    useAudio(el, track);
+    await slideDisc(false);
+    if (token !== trackSequence) return;
+    changing = false;
+    attemptPlay();
+  }
+
+  /** 재생 목록을 소스에 맞춘다. 지금 곡이 목록에 남아 있으면 그대로 이어 간다. */
+  async function syncTracks(list) {
+    const key = list.map((t) => `${trackKeyOf(t)}:${t.cover?.url || ''}`).join('|');
+    if (key === tracksKey) return;
+    tracksKey = key;
+    tracks = list;
+    const at = audioTrackKey ? tracks.findIndex((t) => trackKeyOf(t) === audioTrackKey) : -1;
+    if (at >= 0) {
+      trackIndex = at;
+      if (!changing) syncCover(tracks[at].cover || null);
+      return;
+    }
+    // 처음이거나 지금 곡이 빠졌다: 연출 없이 첫 곡을 바로 건다.
+    const token = ++trackSequence;
+    changing = false;
+    dropAudio();
+    turntable.getAnimations().forEach((a) => a.cancel());
+    spinTo(0, 0);
+    trackIndex = 0;
+    syncCover(tracks[0]?.cover || null);
+    const el = tracks.length ? await makeAudio(tracks[0]) : null;
+    if (token !== trackSequence) return el?.remove();
+    useAudio(el, tracks[0]);
     attemptPlay();
   }
 
@@ -282,8 +386,8 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
         wakeFromEmpty?.();
         warmUp();
       }
-      syncCover(result.audio?.cover || null);
-      syncAudio(result.audio || null);
+      // audio는 곡 하나(서버 모드) 또는 곡 목록(드라이브 모드)이다.
+      syncTracks([].concat(result.audio || []));
     }
     return result;
   }
