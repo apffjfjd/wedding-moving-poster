@@ -108,48 +108,33 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   -webkit-user-drag: none;
 }
 
-/* CD 케이스: 투명 플라스틱 테두리(--edge) + 왼쪽 경첩(--hinge) + 겉면 광택. 사진은 안쪽 창(.frame-clip)에 들어간다 */
-.cd-case {
+/* CD 케이스: 불투명한 흰색 정사각형. 오른쪽 입구 노치 윤곽은 player-core.js가 clip-path로 잘라 낸다.
+   잘라 낸 요소에는 그림자가 남지 않으므로 바깥 래퍼에 drop-shadow를 준다. */
+.cd-case-shadow {
   position: absolute;
   z-index: 2;
-  border-radius: max(3px, calc(var(--edge) * 0.35));
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0.22));
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.35),
-    0 2px 6px rgba(0, 0, 0, 0.2),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
-    inset 0 0 0 2px rgba(0, 0, 0, 0.06);
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.32)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
 }
-.cd-case::before { /* 경첩: 세로 홈과 둥근 반사 */
-  content: '';
+.cd-case {
   position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: var(--hinge);
-  border-radius: inherit;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  background:
-    repeating-linear-gradient(90deg, transparent 0 3px, rgba(255, 255, 255, 0.16) 3px 4px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.14) 30%, rgba(255, 255, 255, 0.36) 55%, rgba(255, 255, 255, 0.1) 80%, rgba(255, 255, 255, 0.45));
-  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.6);
+  inset: 0;
+  background: linear-gradient(150deg, #ffffff, #f7f5f1 55%, #efece7);
 }
-.cd-case::after { /* 겉면 광택: 사진 위를 비스듬히 지나가는 반사 */
+.cd-case::after { /* 겉면 광택: 비스듬히 지나가는 은은한 반사 */
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
-  border-radius: inherit;
-  background: linear-gradient(118deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 22%, transparent 36%, transparent 68%, rgba(255, 255, 255, 0.08) 80%, transparent 92%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.08) 22%, transparent 36%, transparent 70%, rgba(255, 255, 255, 0.06) 82%, transparent 92%);
   pointer-events: none;
 }
-/* 사진이 덮지 않는 여백은 옅은 #FDE3C7 막으로 두어 뒤 화면 배경이 비쳐 보이게 한다 */
+/* 사진 창: 테두리(--edge) 안쪽의 정사각형. 사진이 빈틈 없이 채운다 */
 .frame-clip {
   position: absolute;
-  top: var(--edge); right: var(--edge); bottom: var(--edge); left: var(--hinge);
+  inset: var(--edge);
   overflow: hidden;
-  background: rgba(253, 227, 199, 0.2);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  background: #ece8e2;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 /* 슬라이드 하나: 래퍼(.photo-slide, opacity/filter 전환) > 원본(.fg) */
 .photo-slide { position: absolute; inset: 0; overflow: hidden; will-change: opacity; }
@@ -163,10 +148,10 @@ body.idle .audio-toggle { opacity: 0; pointer-events: none; }
   -webkit-user-drag: none;
   pointer-events: none;
 }
-/* 원본은 잘림 없이 전체를 보여 준다 */
-.photo-slide .fg { object-fit: contain; }
+/* 사진은 창을 꽉 채운다(넘치는 가장자리는 잘림) */
+.photo-slide .fg { object-fit: cover; }
 
-/* CD: 케이스 뒤(z-index 1)에 놓인다. 판은 회전하고, 무지개 반사(::before)와 그림자(::after)는 제자리에 둔다.
+/* CD: 케이스 뒤(z-index 1)에 놓이고 오른쪽 노치 사이로도 보인다. 판은 회전하고, 무지개 반사(::before)와 그림자(::after)는 제자리에 둔다.
    인쇄면 디자인은 미정이라 은색 무지 디스크로 두고, 음악 이미지가 있으면 인쇄면(.record-label)에 채운다. */
 .turntable { position: absolute; z-index: 1; aspect-ratio: 1; }
 .turntable::before {

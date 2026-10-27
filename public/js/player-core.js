@@ -9,8 +9,6 @@
 //   audio     { url, version?, viaFetch?, cover?: photo } | null  — 배경음악 한 곡(반복 재생). 없으면 생략.
 import { resolveEffect, transitionFor } from './effects.js';
 
-import { frameRatio } from './poster.js';
-
 import { holdMsFromSeconds } from './timing.js';
 
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
@@ -70,18 +68,21 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const params = new URLSearchParams(location.search);
   // 저사양 기기용: 블러 전환·패럴랙스 같은 무거운 효과를 가벼운 효과로 대체한다. (?lite=1)
   const lite = params.get('lite') === '1';
-  const ratio = frameRatio(params.get('frameWidth'), params.get('frameHeight'));
   // 포스터 구성: [CD 케이스(사진) + 케이스 뒤로 반쯤 가려진 CD] 위, 하단 문구 이미지 아래.
   // 화면 배경(#stage)에는 케이스에 나오는 사진을 흐리게 깔아 함께 바꾼다.
   const composition = document.createElement('div');
   composition.className = 'poster-composition';
   const showcase = document.createElement('div');
   showcase.className = 'showcase';
+  // 흰색 불투명 케이스. 노치 모양으로 잘라 내면(clip-path) 그림자도 잘리므로, 그림자는 바깥 래퍼(filter)에 준다.
+  const caseShadow = document.createElement('div');
+  caseShadow.className = 'cd-case-shadow';
   const cdCase = document.createElement('div');
   cdCase.className = 'cd-case';
-  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 케이스 안쪽 창
+  const frame = document.createElement('div'); // 사진 슬라이드가 들어가는 케이스 안쪽 정사각형 창
   frame.className = 'frame-clip';
   cdCase.append(frame);
+  caseShadow.append(cdCase);
   // CD(회전) + 고정 광택. 음악이 실제로 재생될 때만 돈다. 인쇄면 디자인은 미정(음악 이미지가 있으면 그것을 쓴다).
   const turntable = document.createElement('div');
   turntable.className = 'turntable';
@@ -93,34 +94,42 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   label.className = 'record-label';
   record.append(label);
   turntable.append(record);
-  showcase.append(turntable, cdCase);
+  showcase.append(turntable, caseShadow);
   const caption = makeImg(new URL('../img/caption.png', import.meta.url).href, 'caption');
   caption.alt = 'KYUDONG & SEOYOON, 2026. 10. 31 | 2:00 PM';
   composition.append(showcase, caption);
   stage.after(composition);
 
-  const DISC = 0.9; // CD 지름 / 케이스 높이
+  const DISC = 0.9; // CD 지름 / 케이스 한 변
   const DISC_OUT = 0.62; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
   function sizePoster() {
     const room = { w: showcase.clientWidth, h: showcase.clientHeight };
     if (!room.w || !room.h) return;
-    // 케이스 = 사진 창(사용자 비율) + 플라스틱 테두리. 왼쪽은 경첩만큼 더 두껍다.
-    const edge = (h) => Math.max(5, 0.035 * h);
-    const hinge = (h) => edge(h) * 2.4;
-    const caseWidthFor = (h) => (h - 2 * edge(h)) * ratio.width / ratio.height + edge(h) + hinge(h);
-    // 높이 h일 때 전체 폭 = 케이스 폭 + CD가 밖으로 나온 만큼. 둘 다 h에 비례하므로 한 번에 맞춘다.
-    const widthPerHeight = caseWidthFor(100) / 100 + DISC * DISC_OUT;
-    const h = Math.min(room.h, room.w / widthPerHeight);
-    const w = caseWidthFor(h);
-    const d = DISC * h;
-    const left = (room.w - (w + d * DISC_OUT)) / 2;
-    const top = (room.h - h) / 2;
-    Object.assign(cdCase.style, { width: `${w}px`, height: `${h}px`, left: `${left}px`, top: `${top}px` });
-    cdCase.style.setProperty('--edge', `${edge(h)}px`);
-    cdCase.style.setProperty('--hinge', `${hinge(h)}px`);
-    Object.assign(turntable.style, { width: `${d}px`, left: `${left + w + d * DISC_OUT - d}px`, top: `${top + (h - d) / 2}px` });
-    // 케이스 안 여백은 반투명이라 뒤에 놓인 CD가 비쳐 보인다. 케이스에 가려지는 부분은 잘라 내 흐린 배경만 보이게 한다.
-    turntable.style.clipPath = `inset(-20% -20% -20% ${d * (1 - DISC_OUT)}px)`;
+    // 케이스는 정사각형이고 사진 창도 정사각형이다(테두리 두께는 사방 같음).
+    const size = Math.min(room.h, room.w / (1 + DISC * DISC_OUT));
+    const d = DISC * size;
+    const left = (room.w - (size + d * DISC_OUT)) / 2;
+    const top = (room.h - size) / 2;
+    Object.assign(caseShadow.style, { width: `${size}px`, height: `${size}px`, left: `${left}px`, top: `${top}px` });
+    const edge = Math.max(6, 0.045 * size);
+    cdCase.style.setProperty('--edge', `${edge}px`);
+    cdCase.style.clipPath = `path('${casePath(size, edge * 0.85)}')`;
+    Object.assign(turntable.style, { width: `${d}px`, left: `${left + size + d * DISC_OUT - d}px`, top: `${top + (size - d) / 2}px` });
+  }
+
+  /** 케이스 윤곽: 모서리를 살짝 둥글린 정사각형에, CD가 나오는 오른쪽 입구 가운데를 반원으로 파낸다.
+   *  노치는 흰 테두리 안에서 끝나게 해(r < 테두리 두께) 사진 창은 항상 온전한 정사각형으로 둔다. */
+  function casePath(size, r) {
+    const c = Math.max(3, 0.012 * size); // 모서리 반지름
+    const mid = size / 2;
+    const f = (n) => n.toFixed(2);
+    return [
+      `M${f(c)},0`, `L${f(size - c)},0`, `A${f(c)},${f(c)} 0 0 1 ${f(size)},${f(c)}`,
+      `L${f(size)},${f(mid - r)}`, `A${f(r)},${f(r)} 0 0 0 ${f(size)},${f(mid + r)}`,
+      `L${f(size)},${f(size - c)}`, `A${f(c)},${f(c)} 0 0 1 ${f(size - c)},${f(size)}`,
+      `L${f(c)},${f(size)}`, `A${f(c)},${f(c)} 0 0 1 0,${f(size - c)}`,
+      `L0,${f(c)}`, `A${f(c)},${f(c)} 0 0 1 ${f(c)},0`, 'Z',
+    ].join(' ');
   }
 
   new ResizeObserver(sizePoster).observe(composition);
@@ -330,8 +339,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
 
   /** 사진 하나를 화면에 올리고 등장 전환을 시작한다. */
   function present(photo, index) {
-    // 원본은 케이스 안에 잘림 없이 고정한다. 케이스 비율과 달라 남는 여백은 비워 두어
-    // .frame-clip의 반투명 바탕 너머로 화면 배경(같은 사진의 블러)이 비쳐 보이게 한다.
+    // 사진은 케이스의 정사각형 창을 꽉 채운다(넘치는 가장자리는 잘림).
     const effect = resolveEffect(photo, index, { lite });
 
     // 화면 배경: 같은 사진을 흐리게 확대해 깔고, 새 배경이 이전 배경 위로 서서히 나타난다.
@@ -356,7 +364,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
       easing: 'ease-in-out',
       fill: 'both',
     });
-    // 여백이 비쳐 보이므로 새 사진이 이전 사진을 덮지 못한다. 이전 사진도 항상 함께 사라지게 한다.
+    // 페이드 계열 전환에서 이전 사진이 겹쳐 남지 않도록 항상 함께 사라지게 한다.
     const fadeOutMs = t.fadeOutPrev ? TRANS_MS * t.enterDelayRatio : TRANS_MS;
     previous.forEach((el) =>
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: fadeOutMs, easing: 'ease-in', fill: 'forwards' }),

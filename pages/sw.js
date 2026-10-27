@@ -3,7 +3,7 @@
 // - 사진 이미지: 캐시 우선 (재생기가 CORS fetch로 받으므로 성공 응답만 안전하게 캐시된다)
 const CACHE = 'wmp-pages-v3';
 const scope = self.registration.scope;
-const SHELL = ['js/poster.js', 'js/timing.js', 'js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/drive-player.js', 'config.js', 'css/player.css', 'img/caption.png'].map(
+const SHELL = ['js/timing.js', 'js/effects.js', 'js/player-core.js', 'js/drive-source.js', 'js/drive-player.js', 'config.js', 'css/player.css', 'img/caption.png'].map(
   (p) => new URL(p, scope).pathname,
 );
 const PLAYER_PATH = new URL('player.html', scope).pathname;

@@ -307,9 +307,7 @@ function setupUpload() {
 }
 
 function setupLinks() {
-  const url = new URL(`/s/${showId}`, location.origin);
-  for (const id of ['frameWidth', 'frameHeight']) url.searchParams.set(id, $(id).value);
-  const playUrl = url.href;
+  const playUrl = new URL(`/s/${showId}`, location.origin).href;
   const editUrl = `${location.origin}/e/${showId}#key=${editKey}`;
   $('playUrl').value = playUrl;
   $('editUrl').value = editUrl;
@@ -363,9 +361,6 @@ async function init() {
   $('app').hidden = false;
   setupLinks();
   setupCopy();
-  for (const id of ['frameWidth', 'frameHeight']) $(id).addEventListener('input', () => {
-    if (['frameWidth', 'frameHeight'].every((key) => $(key).value && $(key).checkValidity())) setupLinks();
-  });
   setupUpload();
   setupAudio();
   setupCover();
