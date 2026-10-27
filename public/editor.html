@@ -59,17 +59,6 @@
       </div>
 
       <section class="card">
-        <h2>배경 이미지 <span class="muted">(선택)</span></h2>
-        <p class="muted">사진 프레임과 LP 뒤에 깔리는 화면 배경입니다. 화면을 꽉 채우도록 가장자리가 잘릴 수 있습니다. 등록하지 않으면 흰 배경으로 표시됩니다.</p>
-        <input id="backgroundFile" type="file" accept="image/jpeg,image/png,image/webp" aria-label="배경 이미지 선택">
-        <div id="backgroundCurrent" class="linkrow" hidden>
-          <img id="backgroundPreview" alt="현재 배경 이미지" style="width:160px;height:90px;border-radius:6px;object-fit:cover">
-          <button id="backgroundRemove" class="danger">배경 삭제</button>
-        </div>
-        <div id="backgroundStatus" class="status" role="status"></div>
-      </section>
-
-      <section class="card">
         <h2>배경음악 <span class="muted">(선택)</span></h2>
         <p class="muted">MP3·OGG·WAV·M4A, 한 곡만 등록할 수 있습니다. 새로 올리면 이전 곡을 대체합니다. 브라우저 자동재생 정책 때문에 결혼식장 PC에서도 화면을 클릭하거나 <b>F</b> 키를 눌러야 소리가 납니다(전체화면을 켜는 동작과 같습니다). 재생 중 오른쪽 아래 버튼으로 음소거할 수 있습니다.</p>
         <label class="dropzone" id="audioDrop">
@@ -84,11 +73,11 @@
       </section>
 
       <section class="card">
-        <h2>LP 중앙 이미지</h2>
-        <p class="muted">배경음악을 먼저 등록한 뒤 직접 준비한 이미지를 선택하세요. 음악을 교체하면 이전 이미지가 해제됩니다. 중앙의 원형 영역에 맞춰 이미지 가장자리가 잘릴 수 있습니다.</p>
-        <input id="coverFile" type="file" accept="image/jpeg,image/png,image/webp" disabled aria-label="LP 중앙 이미지 선택">
+        <h2>CD 이미지</h2>
+        <p class="muted">배경음악을 먼저 등록한 뒤 직접 준비한 이미지를 선택하세요. 음악을 교체하면 이전 이미지가 해제됩니다. CD 인쇄면(가운데 투명 고리를 뺀 원형 영역)에 맞춰 가장자리가 잘릴 수 있습니다. 등록하지 않으면 무지 은색 CD로 표시됩니다.</p>
+        <input id="coverFile" type="file" accept="image/jpeg,image/png,image/webp" disabled aria-label="CD 이미지 선택">
         <div id="coverCurrent" class="linkrow" hidden>
-          <img id="coverPreview" alt="현재 LP 이미지" style="width:80px;height:80px;border-radius:50%;object-fit:cover">
+          <img id="coverPreview" alt="현재 CD 이미지" style="width:80px;height:80px;border-radius:50%;object-fit:cover">
           <button id="coverRemove" class="danger">이미지 삭제</button>
         </div>
         <div id="coverStatus" class="status" role="status"></div>

@@ -41,10 +41,6 @@ const byName = (a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true, sen
 /** 확장자를 뺀 비교용 파일명 (한글 자모 조합·대소문자·앞뒤 공백 무시) */
 const stem = (name) => name.replace(/\.[^.]+$/, '').normalize('NFC').trim().toLocaleLowerCase('ko');
 
-/** 사진 폴더에서 이 이름(확장자 무관)의 이미지는 슬라이드가 아니라 화면 배경으로 쓴다. */
-export const BACKGROUND_NAMES = ['background', '배경'];
-const isBackground = (f) => BACKGROUND_NAMES.includes(stem(f.name));
-
 /**
  * 드라이브 이미지 파일 하나를 재생기용 사진으로 바꾼다.
  * 이미지는 (1) lh3 리사이즈 URL → (2) API가 준 썸네일 → (3) API 원본 다운로드 순으로 시도한다.
@@ -66,10 +62,10 @@ function toPhoto(f, { apiBase, imageBase, apiKey }) {
   };
 }
 
-/** Drive API files.list 응답을 재생기용 사진 목록으로 바꾼다. 배경 이미지는 슬라이드에서 뺀다. */
+/** Drive API files.list 응답을 재생기용 사진 목록으로 바꾼다. */
 export function toPhotos(list, config) {
   return (list.files || [])
-    .filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.') && !isBackground(f))
+    .filter((f) => f.mimeType?.startsWith('image/') && !f.name.startsWith('.'))
     .sort(byName)
     .map((f) => toPhoto(f, config));
 }
@@ -94,12 +90,6 @@ export function findAudio(list, config) {
     viaFetch: true,
     version: file.modifiedTime,
   };
-}
-
-/** 사진 폴더의 배경 이미지(BACKGROUND_NAMES). 여러 개면 이름순 첫 번째, 없으면 null. */
-export function findBackground(list, config) {
-  const file = (list.files || []).filter((f) => f.mimeType?.startsWith('image/') && isBackground(f)).sort(byName)[0];
-  return file ? toPhoto(file, config) : null;
 }
 
 /**
@@ -152,9 +142,7 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
       }
       if (!res.ok) return { status: 'offline' };
 
-      const list = await res.json();
-      const photos = toPhotos(list, { apiBase, imageBase, apiKey });
-      const background = findBackground(list, { apiBase, imageBase, apiKey });
+      const photos = toPhotos(await res.json(), { apiBase, imageBase, apiKey });
       // 공유되지 않은/없는 폴더도 목록은 빈 채로 200이 오므로, 비어 있으면 폴더 접근 가능 여부를 확인한다.
       if (!photos.length && !(await folderExists(folderId))) return { status: 'gone' };
 
@@ -168,7 +156,7 @@ export function createDriveSource({ folderId, bgmFolderId, config }) {
         }
       }
 
-      return { status: 'ok', photos, audio, background };
+      return { status: 'ok', photos, audio };
     },
   };
 }

@@ -1,8 +1,8 @@
 // 서비스 워커: 결혼식장 네트워크가 불안정하거나 끊겨도 한 번 재생한 슬라이드쇼를 계속 재생한다.
 // - 정적 자원/사진: 캐시 우선 (사진 파일명은 불변이므로 안전)
 // - 슬라이드쇼 메타데이터/재생 페이지: 네트워크 우선, 실패 시 마지막 캐시 사용
-const CACHE = 'wmp-v3';
-const SHELL = ['/js/poster.js', '/js/timing.js', '/js/effects.js', '/js/player-core.js', '/js/player.js', '/css/player.css'];
+const CACHE = 'wmp-v4';
+const SHELL = ['/js/poster.js', '/js/timing.js', '/js/effects.js', '/js/player-core.js', '/js/player.js', '/css/player.css', '/img/caption.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
