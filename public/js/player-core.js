@@ -115,17 +115,18 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   const DISC = 0.84; // CD 지름 / 케이스 앞면 한 변
   const DISC_OUT = 0.7; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
   const BACK_OUT = 0.1; // 뒷면이 앞면보다 오른쪽으로 더 나오는 길이 / 앞면 한 변
+  const SHIFT_LEFT = 0.06; // 가운데에서 왼쪽으로 옮기는 거리 / 포스터 영역 너비
   // CD를 케이스 안(앞면 가운데)으로 넣을 때의 이동량. CD 지름 기준 %라 화면 크기가 바뀌어도 맞는다.
   const DISC_IN = `translateX(${(-(0.5 / DISC + DISC_OUT - 0.5) * 100).toFixed(2)}%)`;
   function sizePoster() {
     const room = { w: showcase.clientWidth, h: showcase.clientHeight };
     if (!room.w || !room.h) return;
     // 앞면은 1:1. 사진은 좌우 끝까지 채우고 위아래에만 여백을 둔다.
-    // [케이스 + 나온 CD]를 가운데 두어, 케이스 왼쪽 간격과 나온 CD 오른쪽 간격을 같게 한다.
+    // [케이스 + 나온 CD]를 가운데에서 SHIFT_LEFT만큼 왼쪽으로 둔다(왼쪽 여백이 모자라면 왼쪽 끝에 붙인다).
     const out = Math.max(DISC * DISC_OUT, BACK_OUT); // 앞면 오른쪽으로 가장 멀리 나오는 길이 / 앞면 한 변
     const size = Math.min(room.h, room.w / (1 + out));
     const d = DISC * size;
-    const left = (room.w - size * (1 + out)) / 2;
+    const left = Math.max(0, (room.w - size * (1 + out)) / 2 - SHIFT_LEFT * room.w);
     const top = (room.h - size) / 2;
     const notch = 0.075 * size;
     const rim = Math.max(4, 0.022 * size);
