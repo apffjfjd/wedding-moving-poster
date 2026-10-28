@@ -5,16 +5,16 @@
 //   pollMs    목록 갱신 주기(ms)
 //   messages  { empty, gone, offline, error } 상태별 안내 문구
 //   load()    -> { status: 'ok', photos, audio? } | { status: 'gone' | 'offline' | 'error', message? }
-//   photo     { id, url, width?, height?, effect, version?, fallbacks?: string[], viaFetch?: boolean }
+//   photo     { id, url, width?, height?, effect, anchor?, version?, fallbacks?: string[], viaFetch?: boolean }
 //   audio     track | track[] | null  — 배경음악. track = { url, version?, viaFetch?, cover?: photo }
 //             목록이면 차례로, 한 곡이면 반복 재생하며 곡이 넘어갈 때마다 CD 교체 연출을 거친다.
-import { resolveEffect, transitionFor } from './effects.js';
+import { resolveEffect, transitionFor, anchorPosition } from './effects.js';
 
 import { holdMsFromSeconds } from './timing.js';
 
 const TRANS_MS = 1600; // 다음 사진으로 넘어가는 전환 시간
 // 배경음악이 넘어갈 때의 CD 연출: 서서히 멈춤 → 케이스 안으로 → 잠시 쉼(다음 곡 준비) → 새 CD가 나옴 → 돌면서 재생
-const SPIN_MS = 2400; // CD 한 바퀴
+const SPIN_MS = 3200; // CD 한 바퀴
 const SPIN_UP_MS = 700;
 const STOP_MS = 900;
 const SLIDE_MS = 1300;
@@ -112,8 +112,8 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
   composition.append(showcase, caption);
   stage.after(composition);
 
-  const DISC = 0.9; // CD 지름 / 케이스 앞면 한 변
-  const DISC_OUT = 0.62; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
+  const DISC = 0.84; // CD 지름 / 케이스 앞면 한 변
+  const DISC_OUT = 0.7; // CD 지름 중 케이스 오른쪽 밖으로 나오는 비율
   const BACK_OUT = 0.1; // 뒷면이 앞면보다 오른쪽으로 더 나오는 길이 / 앞면 한 변
   // CD를 케이스 안(앞면 가운데)으로 넣을 때의 이동량. CD 지름 기준 %라 화면 크기가 바뀌어도 맞는다.
   const DISC_IN = `translateX(${(-(0.5 / DISC + DISC_OUT - 0.5) * 100).toFixed(2)}%)`;
@@ -121,32 +121,31 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     const room = { w: showcase.clientWidth, h: showcase.clientHeight };
     if (!room.w || !room.h) return;
     // 앞면은 1:1. 사진은 좌우 끝까지 채우고 위아래에만 여백을 둔다.
-    const size = Math.min(room.h, room.w / (1 + DISC * DISC_OUT));
+    // [케이스 + 나온 CD]를 가운데 두어, 케이스 왼쪽 간격과 나온 CD 오른쪽 간격을 같게 한다.
+    const out = Math.max(DISC * DISC_OUT, BACK_OUT); // 앞면 오른쪽으로 가장 멀리 나오는 길이 / 앞면 한 변
+    const size = Math.min(room.h, room.w / (1 + out));
     const d = DISC * size;
-    const left = (room.w - (size + d * DISC_OUT)) / 2;
+    const left = (room.w - size * (1 + out)) / 2;
     const top = (room.h - size) / 2;
-    const corner = Math.max(3, 0.012 * size);
     const notch = 0.075 * size;
     const rim = Math.max(4, 0.022 * size);
     Object.assign(caseShadow.style, { width: `${size}px`, height: `${size}px`, left: `${left}px`, top: `${top}px` });
-    Object.assign(caseBack.style, { width: `${size * (1 + BACK_OUT)}px`, height: `${size}px`, left: `${left}px`, top: `${top}px`, borderRadius: `${corner}px` });
+    Object.assign(caseBack.style, { width: `${size * (1 + BACK_OUT)}px`, height: `${size}px`, left: `${left}px`, top: `${top}px` });
     cdCase.style.setProperty('--margin', `${0.1 * size}px`);
-    cdCase.style.clipPath = `path('${casePath(size, notch, corner)}')`;
+    cdCase.style.clipPath = `path('${casePath(size, notch)}')`;
     const ring = notch + rim; // 노치보다 rim만큼 큰 원을 오른쪽 가장자리 가운데에 두면, 잘린 노치 둘레만 반원 띠로 남는다
     Object.assign(notchRim.style, { width: `${ring * 2}px`, height: `${ring * 2}px`, left: `${size - ring}px`, top: `${size / 2 - ring}px` });
     Object.assign(turntable.style, { width: `${d}px`, left: `${left + size + d * DISC_OUT - d}px`, top: `${top + (size - d) / 2}px` });
   }
 
-  /** 케이스 앞면 윤곽: 모서리(c)를 살짝 둥글린 정사각형에, CD가 나오는 오른쪽 입구 가운데를 반지름 r의 반원으로 파낸다. */
-  function casePath(size, r, c) {
+  /** 케이스 앞면 윤곽: 모서리가 직각인 정사각형에, CD가 나오는 오른쪽 입구 가운데를 반지름 r의 반원으로 파낸다. */
+  function casePath(size, r) {
     const mid = size / 2;
     const f = (n) => n.toFixed(2);
     return [
-      `M${f(c)},0`, `L${f(size - c)},0`, `A${f(c)},${f(c)} 0 0 1 ${f(size)},${f(c)}`,
+      'M0,0', `L${f(size)},0`,
       `L${f(size)},${f(mid - r)}`, `A${f(r)},${f(r)} 0 0 0 ${f(size)},${f(mid + r)}`,
-      `L${f(size)},${f(size - c)}`, `A${f(c)},${f(c)} 0 0 1 ${f(size - c)},${f(size)}`,
-      `L${f(c)},${f(size)}`, `A${f(c)},${f(c)} 0 0 1 0,${f(size - c)}`,
-      `L0,${f(c)}`, `A${f(c)},${f(c)} 0 0 1 ${f(c)},0`, 'Z',
+      `L${f(size)},${f(size)}`, `L0,${f(size)}`, 'Z',
     ].join(' ');
   }
 
@@ -443,7 +442,7 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
 
   /** 사진 하나를 화면에 올리고 등장 전환을 시작한다. */
   function present(photo, index) {
-    // 사진은 케이스의 정사각형 창을 꽉 채운다(넘치는 가장자리는 잘림).
+    // 사진은 케이스의 정사각형 창을 꽉 채운다(넘치는 가장자리는 잘림). 잘리는 기준점은 photo.anchor.
     const effect = resolveEffect(photo, index, { lite });
 
     // 화면 배경: 같은 사진을 흐리게 확대해 깔고, 새 배경이 이전 배경 위로 서서히 나타난다.
@@ -456,7 +455,9 @@ export function startPlayer({ source, stage, messageEl, hintEl, holdMs = holdMsF
     photoSlide.className = 'photo-slide';
     photoSlide.dataset.photoId = photo.id; // 디버깅/자동 검증용
     photoSlide.dataset.effect = effect;
-    photoSlide.append(makeImg(photo.url, 'fg'));
+    const fg = makeImg(photo.url, 'fg');
+    fg.style.objectPosition = anchorPosition(photo.anchor); // 잘릴 때 남길 쪽(파일명의 top·left 등)
+    photoSlide.append(fg);
 
     const previous = [...frame.children];
     frame.append(photoSlide);

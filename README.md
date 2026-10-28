@@ -64,6 +64,9 @@ Pages는 정적 파일만 서빙하므로 서버 모드(위)는 올릴 수 없�
   `01_fade.jpg` · `02_cross-dissolve.jpg`(하이픈·대소문자 무시) · `03.jpg`(자동) · `04_blur.jpg`
 - 효과 이름: `fade` `crossdissolve` `blur` `auto`. 사진은 액자 안에 고정되므로 효과는 사진이 바뀔 때의 전환 방식이다.
   예전 이름(`zoomin` `zoomout` `pan` `kenburns` `parallax`)도 인식하지만 크로스 디졸브로 재생된다.
+- 파일명에 **기준점**을 넣으면 사진이 케이스 창보다 넘쳐 잘릴 때 그쪽을 남긴다. 없으면 가운데.
+  `top`(상) `topleft`(좌상) `topright`(우상) `left`(좌) `center`(중) `right`(우) `bottom`(하) `bottomleft`(좌하) `bottomright`(우하)
+  하이픈·대소문자 무시(`top-left`), 순서를 바꾼 `lefttop` 등과 `middle`도 인식한다. 효과와 함께 쓸 수 있다: `05_fade_top.jpg` · `06_bottom-right.jpg`
 - 이름이 `background` 또는 `배경`인 이미지(확장자·대소문자 무관, 예: `background.jpg`)는 슬라이드에서 빠지고 **화면 배경**으로 쓰인다. 없으면 흰 배경.
 - 사진 방향·크기는 실제로 불러온 이미지에서 측정한다(EXIF 회전 반영). HEIC도 드라이브가 변환해 주는 이미지로 재생된다.
 

@@ -60,3 +60,31 @@ export function transitionFor(effect) {
       return { enter: [{ opacity: 0 }, { opacity: 1 }], enterDelayRatio: 0, fadeOutPrev: false };
   }
 }
+
+// 사진이 케이스 창보다 넘칠 때 어느 쪽을 기준으로 남길지(object-position). 파일명에 이 단어를 넣어 고른다.
+export const ANCHORS = {
+  topleft: '0% 0%',
+  top: '50% 0%',
+  topright: '100% 0%',
+  left: '0% 50%',
+  center: '50% 50%',
+  right: '100% 50%',
+  bottomleft: '0% 100%',
+  bottom: '50% 100%',
+  bottomright: '100% 100%',
+};
+
+// 같은 위치를 다르게 부르는 이름 (lefttop처럼 순서를 바꾼 것, middle)
+const ANCHOR_ALIASES = { lefttop: 'topleft', righttop: 'topright', leftbottom: 'bottomleft', rightbottom: 'bottomright', middle: 'center' };
+
+/** 단어(대소문자·하이픈 무시)를 기준점 id로 바꾼다. 기준점 단어가 아니면 null. */
+export function anchorOf(word) {
+  const id = String(word || '').toLowerCase().replace(/-/g, '');
+  if (Object.hasOwn(ANCHORS, id)) return id;
+  return Object.hasOwn(ANCHOR_ALIASES, id) ? ANCHOR_ALIASES[id] : null;
+}
+
+/** 기준점 id의 CSS object-position. 없거나 모르는 값이면 가운데. */
+export function anchorPosition(anchor) {
+  return Object.hasOwn(ANCHORS, anchor) ? ANCHORS[anchor] : ANCHORS.center;
+}
