@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EFFECTS, EFFECT_IDS, currentEffect, resolveEffect, transitionFor, orientationOf } from '../public/js/effects.js';
+import { EFFECTS, EFFECT_IDS, currentEffect, resolveEffect, transitionFor, orientationOf, anchorPosition } from '../public/js/effects.js';
 
 test('선택할 수 있는 효과는 자동과 세 가지 전환이다 (FR-002)', () => {
   assert.deepEqual(EFFECTS.map((e) => e.id), ['auto', 'fade', 'crossdissolve', 'blur']);
@@ -51,4 +51,12 @@ test('fade는 이전 화면이 먼저 사라진 뒤 나타난다', () => {
   assert.equal(t.fadeOutPrev, true);
   assert.ok(t.enterDelayRatio > 0);
   assert.equal(transitionFor('crossdissolve').fadeOutPrev, false);
+});
+
+test('anchorPosition: 기준점을 object-position으로 바꾸고, 없거나 모르는 값은 가운데', () => {
+  assert.equal(anchorPosition('topleft'), '0% 0%');
+  assert.equal(anchorPosition('bottom'), '50% 100%');
+  assert.equal(anchorPosition('right'), '100% 50%');
+  assert.equal(anchorPosition(undefined), '50% 50%');
+  assert.equal(anchorPosition('toString'), '50% 50%');
 });

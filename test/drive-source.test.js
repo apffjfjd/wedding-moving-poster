@@ -39,6 +39,33 @@ test('parsePhotoName: 효과 이름이 없거나 단어 일부일 뿐이면 자�
 const cfg = { apiBase: 'https://api.test/drive/v3', imageBase: 'https://img.test/d', apiKey: 'K&Y' };
 const file = (id, name, extra = {}) => ({ id, name, mimeType: 'image/jpeg', modifiedTime: '2026-09-21T00:00:00Z', ...extra });
 
+test('parsePhotoName: 파일명에서 사진 기준점을 읽는다', () => {
+  assert.equal(parsePhotoName('01_top.jpg').anchor, 'top');
+  assert.equal(parsePhotoName('02_Top-Left.jpg').anchor, 'topleft');
+  assert.equal(parsePhotoName('03 topright.png').anchor, 'topright');
+  assert.equal(parsePhotoName('04_left.jpg').anchor, 'left');
+  assert.equal(parsePhotoName('05_center.jpg').anchor, 'center');
+  assert.equal(parsePhotoName('06_right.jpg').anchor, 'right');
+  assert.equal(parsePhotoName('07_bottom.jpg').anchor, 'bottom');
+  assert.equal(parsePhotoName('08_bottom-left.jpg').anchor, 'bottomleft');
+  assert.equal(parsePhotoName('09_BOTTOMRIGHT.jpg').anchor, 'bottomright');
+  assert.equal(parsePhotoName('10_left-top.jpg').anchor, 'topleft');
+  assert.equal(parsePhotoName('11_middle.jpg').anchor, 'center');
+});
+
+test('parsePhotoName: 효과와 기준점을 함께 쓸 수 있고, 없으면 가운데', () => {
+  assert.deepEqual(parsePhotoName('12_fade_bottom.jpg'), { effect: 'fade', anchor: 'bottom' });
+  assert.deepEqual(parsePhotoName('13_top_blur.jpg'), { effect: 'blur', anchor: 'top' });
+  assert.equal(parsePhotoName('14.jpg').anchor, 'center');
+  assert.equal(parsePhotoName('topless_01.jpg').anchor, 'center'); // 'top'이 단어 일부일 뿐
+  assert.equal(parsePhotoName('constructor.jpg').anchor, 'center');
+});
+
+test('toPhotos: 파일명의 기준점을 사진에 붙인다', () => {
+  const photos = toPhotos({ files: [file('a', '1_top-right.jpg'), file('b', '2.jpg')] }, cfg);
+  assert.deepEqual(photos.map((p) => p.anchor), ['topright', 'center']);
+});
+
 test('toPhotos: 숫자 인식 이름순으로 정렬한다 (2가 10보다 먼저)', () => {
   const photos = toPhotos({ files: [file('c', '10_a.jpg'), file('a', '2_b.jpg'), file('b', '1_c.jpg')] }, cfg);
   assert.deepEqual(photos.map((p) => p.id), ['b', 'a', 'c']);

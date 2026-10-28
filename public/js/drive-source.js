@@ -1,6 +1,6 @@
 // 구글 드라이브 폴더를 사진 소스로 쓰는 재생기 데이터 소스 (GitHub Pages 모드).
 // 드라이브 폴더가 곧 편집기다: 사진을 넣고 빼고 이름을 바꾸면 재생 화면에 반영된다.
-import { EFFECT_IDS } from './effects.js';
+import { EFFECT_IDS, anchorOf } from './effects.js';
 
 const FOLDER_ID_RE = /^[A-Za-z0-9_-]{10,}$/;
 
@@ -21,18 +21,23 @@ export function parseFolderId(input) {
 }
 
 /**
- * 파일명에서 전환 효과를 읽는다. 확장자를 뺀 이름을 '_' 또는 공백으로 나눈 조각 중
+ * 파일명에서 전환 효과와 사진 기준점을 읽는다. 확장자를 뺀 이름을 '_' 또는 공백으로 나눈 조각 중
  * 효과 이름(대소문자·하이픈 무시)이 있으면 그 효과를 쓰고, 없으면 자동이다.
+ * 기준점 단어(top, topleft, top-right, left, center, right, bottom, bottomleft, bottomright)가 있으면
+ * 케이스 창에서 사진이 잘릴 때 그쪽을 남긴다. 없으면 가운데(center).
  *   "03_kenburns.jpg" -> kenburns,  "04_zoom-in.jpg" -> zoomin,  "05.jpg" -> auto
+ *   "06_top.jpg" -> 위쪽 기준,  "07_fade_bottom-left.jpg" -> 페이드 + 왼쪽 아래 기준
  */
 export function parsePhotoName(name) {
   const base = String(name).replace(/\.[^.]+$/, '');
   let effect = 'auto';
+  let anchor = 'center';
   for (const token of base.split(/[_\s]+/)) {
     const normalized = token.toLowerCase().replace(/-/g, '');
     if (EFFECT_IDS.includes(normalized)) effect = normalized;
+    anchor = anchorOf(normalized) || anchor;
   }
-  return { effect };
+  return { effect, anchor };
 }
 
 /** 이름순(숫자는 크기순: 2 < 10) 정렬 비교 함수 */
@@ -58,7 +63,7 @@ function toPhoto(f, { apiBase, imageBase, apiKey }) {
     version: f.modifiedTime,
     width: f.imageMediaMetadata?.width,
     height: f.imageMediaMetadata?.height,
-    effect: parsePhotoName(f.name).effect,
+    ...parsePhotoName(f.name), // effect, anchor
   };
 }
 
