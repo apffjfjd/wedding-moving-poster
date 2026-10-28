@@ -76,7 +76,28 @@
         <thead><tr><th>효과</th><th>파일명에 쓰는 이름</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="muted">사진 크기·방향은 자동으로 감지합니다. 모든 사진은 CD 케이스의 정사각형 창을 꽉 채우도록 표시되며, 창을 넘치는 가장자리는 잘립니다.</p>
+      <p class="muted">사진 크기·방향은 자동으로 감지합니다. 모든 사진은 CD 케이스의 창(가로:세로 약 5:4)을 꽉 채우도록 표시되며, 창을 넘치는 가장자리는 잘립니다.</p>
+    </section>
+
+    <section class="card">
+      <h2>5. 파일명으로 사진 위치 고르기 (선택)</h2>
+      <p>사진이 케이스 창보다 커서 잘릴 때, 파일명에 아래 단어를 밑줄(언더바)로 붙이면 <b>그쪽을 남기고</b> 반대쪽을 잘라 냅니다. 안 붙이면 가운데를 기준으로 잘립니다. 효과 이름과 함께 써도 됩니다.</p>
+      <p><code>05_top.jpg</code> · <code>06_bottom-left.jpg</code> · <code>07_fade_right.jpg</code>(페이드 + 오른쪽)</p>
+      <table class="rules">
+        <thead><tr><th>위치</th><th>파일명에 쓰는 이름</th></tr></thead>
+        <tbody>
+          <tr><td>위</td><td><code>top</code></td></tr>
+          <tr><td>왼쪽 위</td><td><code>topleft</code> 또는 <code>top-left</code></td></tr>
+          <tr><td>오른쪽 위</td><td><code>topright</code> 또는 <code>top-right</code></td></tr>
+          <tr><td>왼쪽</td><td><code>left</code></td></tr>
+          <tr><td>가운데</td><td><code>center</code> (기본값)</td></tr>
+          <tr><td>오른쪽</td><td><code>right</code></td></tr>
+          <tr><td>아래</td><td><code>bottom</code></td></tr>
+          <tr><td>왼쪽 아래</td><td><code>bottomleft</code> 또는 <code>bottom-left</code></td></tr>
+          <tr><td>오른쪽 아래</td><td><code>bottomright</code> 또는 <code>bottom-right</code></td></tr>
+        </tbody>
+      </table>
+      <p class="muted">세로 사진은 위아래가 잘리므로 <code>top</code>·<code>bottom</code>이, 가로로 긴 사진은 좌우가 잘리므로 <code>left</code>·<code>right</code>가 효과가 있습니다. <code>topleft</code>처럼 두 방향을 합친 이름은 실제로 잘리는 방향 쪽만 적용됩니다. 대소문자는 구분하지 않습니다.</p>
     </section>
   </main>
   <script type="module" src="./js/generator.js"></script>
